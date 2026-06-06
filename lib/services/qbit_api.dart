@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:dio_cookie_manager/dio_cookie_manager.dart';
 import 'package:cookie_jar/cookie_jar.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class ServerConfig {
   String url;
@@ -41,6 +42,41 @@ class QBitApi {
   void setServer(ServerConfig config) {
     currentServer = config;
     _dio.options.baseUrl = config.url;
+  }
+
+  /// 从本地读取已保存的服务器配置；没有有效配置时返回 null。
+  /// 同时兼容旧版本保存的完整 qbit_url。
+  static Future<ServerConfig?> loadSavedConfig() async {
+    final prefs = await SharedPreferences.getInstance();
+    final username = prefs.getString('qbit_username');
+    final password = prefs.getString('qbit_password') ?? '';
+
+    String? host = prefs.getString('qbit_host');
+    String? port = prefs.getString('qbit_port');
+    bool https = prefs.getBool('qbit_https') ?? false;
+
+    // 旧版只存了完整 url，拆出 scheme/host/port
+    final legacy = prefs.getString('qbit_url');
+    if (host == null && legacy != null && legacy.isNotEmpty) {
+      final parsed = Uri.tryParse(legacy);
+      if (parsed != null) {
+        https = parsed.scheme == 'https';
+        host = parsed.host;
+        if (parsed.hasPort) port = parsed.port.toString();
+      }
+    }
+
+    if (host == null || host.trim().isEmpty || username == null || username.trim().isEmpty) {
+      return null;
+    }
+
+    host = host.replaceFirst(RegExp(r'^https?://'), '').replaceAll(RegExp(r'/+$'), '');
+    final scheme = https ? 'https' : 'http';
+    final url = (port != null && port.trim().isNotEmpty)
+        ? '$scheme://$host:$port'
+        : '$scheme://$host';
+
+    return ServerConfig(url: url, username: username.trim(), password: password);
   }
 
   // 1. 登录并获取 Cookie（带详细结果，供测试连接使用）
