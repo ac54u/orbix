@@ -43,9 +43,28 @@ class QBitApi {
           'username': currentServer!.username,
           'password': currentServer!.password,
         },
-        options: Options(contentType: Headers.formUrlEncodedContentType),
+        options: Options(
+          contentType: Headers.formUrlEncodedContentType,
+          // 部分 qBittorrent 开启了 CSRF 校验，需带上 Referer/Origin
+          headers: {
+            'Referer': currentServer!.url,
+            'Origin': currentServer!.url,
+          },
+          // 不让 Dio 因 401/403 抛异常，由我们自己判断状态码
+          validateStatus: (status) => status != null && status < 500,
+        ),
       );
-      return response.data.toString().contains('Ok');
+
+      // 不同 qBittorrent 版本成功表现不一：
+      //   - 旧版：200 且 body 为 "Ok."
+      //   - 新版：204 空响应体（仅靠 Set-Cookie）
+      // 失败统一为 401/403。因此以状态码为准，兼容旧版文本。
+      final code = response.statusCode ?? 0;
+      if (code == 200 || code == 204) {
+        return code == 204 ||
+            response.data.toString().toLowerCase().contains('ok');
+      }
+      return false;
     } catch (e) {
       print("登录失败: $e");
       return false;
