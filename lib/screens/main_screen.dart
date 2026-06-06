@@ -1,7 +1,10 @@
 import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:get/get.dart';
 import '../services/qbit_api.dart';
+import 'login_screen.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -13,6 +16,7 @@ class MainScreen extends StatefulWidget {
 class _MainScreenState extends State<MainScreen> {
   int _currentIndex = 0;
   Timer? _refreshTimer;
+  String _filter = 'all'; // 当前筛选：all/downloading/seeding/active/paused/completed
 
   // 动态数据源
   List<dynamic> _torrents = [];
@@ -118,6 +122,303 @@ class _MainScreenState extends State<MainScreen> {
     }
   }
 
+  // —— 筛选 ——
+
+  String _filterLabel(String key) {
+    switch (key) {
+      case 'downloading':
+        return '下载中';
+      case 'seeding':
+        return '做种中';
+      case 'active':
+        return '活动中';
+      case 'paused':
+        return '已暂停';
+      case 'completed':
+        return '已完成';
+      default:
+        return '全部';
+    }
+  }
+
+  bool _matchesFilter(dynamic t) {
+    if (_filter == 'all') return true;
+    final s = (t['state'] ?? '').toString();
+    switch (_filter) {
+      case 'downloading':
+        return ['downloading', 'metaDL', 'forcedDL', 'stalledDL', 'queuedDL',
+                'checkingDL'].contains(s);
+      case 'seeding':
+        return ['uploading', 'forcedUP', 'stalledUP', 'queuedUP', 'checkingUP']
+            .contains(s);
+      case 'paused':
+        return s.startsWith('stopped') || s.startsWith('paused');
+      case 'completed':
+        return (t['progress'] ?? 0.0).toDouble() >= 1.0;
+      case 'active':
+        return ((t['dlspeed'] ?? 0) as int) > 0 ||
+            ((t['upspeed'] ?? 0) as int) > 0;
+      default:
+        return true;
+    }
+  }
+
+  void _showFilterMenu() {
+    const options = [
+      ['all', '全部'],
+      ['downloading', '下载中'],
+      ['seeding', '做种中'],
+      ['active', '活动中'],
+      ['paused', '已暂停'],
+      ['completed', '已完成'],
+    ];
+    showCupertinoModalPopup<void>(
+      context: context,
+      builder: (ctx) => CupertinoActionSheet(
+        title: const Text('筛选'),
+        actions: options.map((o) {
+          final selected = _filter == o[0];
+          return CupertinoActionSheetAction(
+            onPressed: () {
+              Navigator.pop(ctx);
+              setState(() => _filter = o[0]);
+            },
+            child: Text(
+              o[1],
+              style: TextStyle(
+                fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
+                color: selected
+                    ? const Color(0xFF007AFF)
+                    : const Color(0xFF1C1C1E),
+              ),
+            ),
+          );
+        }).toList(),
+        cancelButton: CupertinoActionSheetAction(
+          onPressed: () => Navigator.pop(ctx),
+          child: const Text('取消'),
+        ),
+      ),
+    );
+  }
+
+  // —— 添加任务 ——
+
+  void _showAddMenu() {
+    showCupertinoModalPopup<void>(
+      context: context,
+      builder: (ctx) => CupertinoActionSheet(
+        title: const Text('添加任务'),
+        actions: [
+          CupertinoActionSheetAction(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _showAddMagnetDialog();
+            },
+            child: const Text('添加磁力链接'),
+          ),
+          CupertinoActionSheetAction(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _pickAndAddTorrent();
+            },
+            child: const Text('添加种子文件'),
+          ),
+        ],
+        cancelButton: CupertinoActionSheetAction(
+          onPressed: () => Navigator.pop(ctx),
+          child: const Text('取消'),
+        ),
+      ),
+    );
+  }
+
+  void _showAddMagnetDialog() {
+    final controller = TextEditingController();
+    showCupertinoDialog<void>(
+      context: context,
+      builder: (ctx) => CupertinoAlertDialog(
+        title: const Text('添加磁力链接'),
+        content: Padding(
+          padding: const EdgeInsets.only(top: 12),
+          child: CupertinoTextField(
+            controller: controller,
+            placeholder: 'magnet:?xt=... 或种子 URL',
+            minLines: 1,
+            maxLines: 4,
+            autofocus: true,
+          ),
+        ),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('取消'),
+          ),
+          CupertinoDialogAction(
+            isDefaultAction: true,
+            onPressed: () {
+              final text = controller.text.trim();
+              Navigator.pop(ctx);
+              if (text.isEmpty) return;
+              _runAction(() => QBitApi().addMagnet(text), '磁力链接已添加');
+            },
+            child: const Text('添加'),
+          ),
+        ],
+      ),
+    ).then((_) => controller.dispose());
+  }
+
+  Future<void> _pickAndAddTorrent() async {
+    FilePickerResult? result;
+    try {
+      // iOS 上对自定义后缀支持不稳定，用 any 再自行校验，兼容性最好
+      result = await FilePicker.platform.pickFiles(withData: true);
+    } catch (e) {
+      debugPrint('选择文件失败: $e');
+    }
+    if (!mounted || result == null || result.files.isEmpty) return;
+
+    final file = result.files.first;
+    final bytes = file.bytes;
+    if (bytes == null) {
+      _toast('无法读取文件内容', ok: false);
+      return;
+    }
+    if (!file.name.toLowerCase().endsWith('.torrent')) {
+      _toast('请选择 .torrent 文件', ok: false);
+      return;
+    }
+    _runAction(() => QBitApi().addTorrentBytes(bytes, file.name), '种子文件已添加');
+  }
+
+  // —— 长按种子的操作菜单 ——
+
+  bool _isPaused(String state) =>
+      state.startsWith('stopped') || state.startsWith('paused');
+
+  void _showTorrentActions(String hash, String name, String state) {
+    final paused = _isPaused(state);
+    showCupertinoModalPopup<void>(
+      context: context,
+      builder: (ctx) => CupertinoActionSheet(
+        title: Text(
+          name,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontSize: 13),
+        ),
+        actions: [
+          if (paused)
+            CupertinoActionSheetAction(
+              onPressed: () {
+                Navigator.pop(ctx);
+                _runAction(() => QBitApi().startTorrent(hash), '已启动');
+              },
+              child: const Text('启动'),
+            )
+          else
+            CupertinoActionSheetAction(
+              onPressed: () {
+                Navigator.pop(ctx);
+                _runAction(() => QBitApi().stopTorrent(hash), '已暂停');
+              },
+              child: const Text('暂停'),
+            ),
+          CupertinoActionSheetAction(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _runAction(() => QBitApi().forceStartTorrent(hash), '已强制启动');
+            },
+            child: const Text('强制启动'),
+          ),
+          CupertinoActionSheetAction(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _runAction(() => QBitApi().recheckTorrent(hash), '已开始重新校验');
+            },
+            child: const Text('强制重新校验'),
+          ),
+          CupertinoActionSheetAction(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _runAction(() => QBitApi().reannounceTorrent(hash), '已重新汇报');
+            },
+            child: const Text('强制重新汇报'),
+          ),
+          CupertinoActionSheetAction(
+            isDestructiveAction: true,
+            onPressed: () {
+              Navigator.pop(ctx);
+              _confirmDelete(hash, name);
+            },
+            child: const Text('删除'),
+          ),
+        ],
+        cancelButton: CupertinoActionSheetAction(
+          onPressed: () => Navigator.pop(ctx),
+          child: const Text('取消'),
+        ),
+      ),
+    );
+  }
+
+  // 删除二次确认：可选择是否连同文件一起删
+  void _confirmDelete(String hash, String name) {
+    showCupertinoModalPopup<void>(
+      context: context,
+      builder: (ctx) => CupertinoActionSheet(
+        title: const Text('删除任务'),
+        message: Text(name, maxLines: 2, overflow: TextOverflow.ellipsis),
+        actions: [
+          CupertinoActionSheetAction(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _runAction(
+                  () => QBitApi().deleteTorrent(hash, deleteFiles: false),
+                  '已删除任务（保留文件）');
+            },
+            child: const Text('仅删除任务（保留文件）'),
+          ),
+          CupertinoActionSheetAction(
+            isDestructiveAction: true,
+            onPressed: () {
+              Navigator.pop(ctx);
+              _runAction(
+                  () => QBitApi().deleteTorrent(hash, deleteFiles: true),
+                  '已删除任务和文件');
+            },
+            child: const Text('删除任务和文件'),
+          ),
+        ],
+        cancelButton: CupertinoActionSheetAction(
+          onPressed: () => Navigator.pop(ctx),
+          child: const Text('取消'),
+        ),
+      ),
+    );
+  }
+
+  // 执行操作 → 立即刷新 → 反馈
+  Future<void> _runAction(Future<bool> Function() action, String okMsg) async {
+    final ok = await action();
+    if (!mounted) return;
+    await _fetchData(); // 操作后立刻刷新列表
+    if (!mounted) return;
+    _toast(ok ? okMsg : '操作失败，请重试', ok: ok);
+  }
+
+  void _toast(String msg, {required bool ok}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: ok ? const Color(0xFF34C759) : const Color(0xFFFF3B30),
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(milliseconds: 1400),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -133,7 +434,13 @@ class _MainScreenState extends State<MainScreen> {
                   _buildTorrentPage(),
                   _buildPlaceholder("统计"),
                   _buildPlaceholder("搜索"),
-                  _buildPlaceholder("设置"),
+                  ServerSettingsPage(
+                    // 切换服务器后回到「种子」页并立即刷新，给出直观反馈
+                    onSwitched: () {
+                      setState(() => _currentIndex = 0);
+                      _fetchData();
+                    },
+                  ),
                 ],
               ),
             ),
@@ -189,9 +496,45 @@ class _MainScreenState extends State<MainScreen> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        _buildCircleButton(CupertinoIcons.bars, isOutlined: true),
-        _buildCircleButton(CupertinoIcons.add, isOutlined: false),
+        // 左上角：筛选
+        _buildFilterButton(),
+        // 右上角：添加磁力链 / 种子文件
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: _showAddMenu,
+          child: _buildCircleButton(CupertinoIcons.add, isOutlined: false),
+        ),
       ],
+    );
+  }
+
+  Widget _buildFilterButton() {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: _showFilterMenu,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: const Color(0xFF007AFF), width: 1.5),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(CupertinoIcons.line_horizontal_3_decrease,
+                color: Color(0xFF007AFF), size: 18),
+            const SizedBox(width: 6),
+            Text(
+              _filterLabel(_filter),
+              style: const TextStyle(
+                  color: Color(0xFF007AFF),
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -291,12 +634,22 @@ class _MainScreenState extends State<MainScreen> {
 
   // —— 动态渲染服务器返回的种子列表 ——
   Widget _buildDynamicTorrentList() {
-    if (_torrents.isEmpty) {
+    final list = _torrents.where(_matchesFilter).toList();
+
+    if (list.isEmpty) {
+      final String emptyText;
+      if (!_loaded) {
+        emptyText = "加载中…";
+      } else if (_torrents.isEmpty) {
+        emptyText = "暂无种子任务";
+      } else {
+        emptyText = "「${_filterLabel(_filter)}」下暂无任务";
+      }
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 40),
         child: Center(
           child: Text(
-            _loaded ? "暂无种子任务" : "加载中…",
+            emptyText,
             style: const TextStyle(color: Colors.grey, fontSize: 16),
           ),
         ),
@@ -304,11 +657,13 @@ class _MainScreenState extends State<MainScreen> {
     }
 
     return Column(
-      children: _torrents.map((t) {
+      children: list.map((t) {
         final name = t['name'] ?? "未知任务";
+        final hash = (t['hash'] ?? "").toString();
+        final rawState = (t['state'] ?? "").toString();
         final totalSize = (t['total_size'] ?? 0) as int;
         final progress = (t['progress'] ?? 0.0).toDouble();
-        final stateInfo = _parseState(t['state'] ?? "");
+        final stateInfo = _parseState(rawState);
         final dlspeed = (t['dlspeed'] ?? 0) as int;
         final upspeed = (t['upspeed'] ?? 0) as int;
         final ratio = (t['ratio'] ?? 0.0).toDouble();
@@ -316,18 +671,24 @@ class _MainScreenState extends State<MainScreen> {
 
         return Padding(
           padding: const EdgeInsets.only(bottom: 16.0),
-          child: _buildTorrentCard(
-            title: name,
-            size: _formatSize(totalSize),
-            progress: progress,
-            progressText: "${(progress * 100).toStringAsFixed(1)}%",
-            statusText: stateInfo["text"],
-            themeColor: stateInfo["color"],
-            isDownloading: stateInfo["isDl"],
-            downSpeed: _formatSpeed(dlspeed),
-            upSpeed: _formatSpeed(upspeed),
-            ratio: ratio.toStringAsFixed(2),
-            eta: _formatEta(eta),
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onLongPress: hash.isEmpty
+                ? null
+                : () => _showTorrentActions(hash, name, rawState),
+            child: _buildTorrentCard(
+              title: name,
+              size: _formatSize(totalSize),
+              progress: progress,
+              progressText: "${(progress * 100).toStringAsFixed(1)}%",
+              statusText: stateInfo["text"],
+              themeColor: stateInfo["color"],
+              isDownloading: stateInfo["isDl"],
+              downSpeed: _formatSpeed(dlspeed),
+              upSpeed: _formatSpeed(upspeed),
+              ratio: ratio.toStringAsFixed(2),
+              eta: _formatEta(eta),
+            ),
           ),
         );
       }).toList(),
@@ -472,6 +833,251 @@ class _MainScreenState extends State<MainScreen> {
           const SizedBox(height: 4),
           Text(label, style: TextStyle(color: color, fontSize: 11, fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal)),
         ],
+      ),
+    );
+  }
+}
+
+/// 设置页：服务器管理（列表 / 切换 / 添加 / 删除）
+class ServerSettingsPage extends StatefulWidget {
+  /// 切换服务器成功后的回调，让主界面立即刷新数据
+  final VoidCallback? onSwitched;
+  const ServerSettingsPage({super.key, this.onSwitched});
+
+  @override
+  State<ServerSettingsPage> createState() => _ServerSettingsPageState();
+}
+
+class _ServerSettingsPageState extends State<ServerSettingsPage> {
+  static const Color _accent = Color(0xFF007AFF);
+  static const Color _ink = Color(0xFF1C1C1E);
+  static const Color _inkMuted = Color(0xFF8E8E93);
+
+  List<ServerConfig> _servers = [];
+  // 当前活动服务器用 url + username 共同标识（同地址可能多个账号）
+  String? _activeUrl;
+  String? _activeUser;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final servers = await QBitApi.loadServers();
+    final active = await QBitApi.loadSavedConfig();
+    if (!mounted) return;
+    setState(() {
+      _servers = servers;
+      _activeUrl = active?.url;
+      _activeUser = active?.username;
+      _loading = false;
+    });
+  }
+
+  bool _isActive(ServerConfig s) =>
+      _activeUrl != null && s.url == _activeUrl && s.username == _activeUser;
+
+  Future<void> _switchTo(ServerConfig s) async {
+    if (_isActive(s)) return;
+    await QBitApi.setActiveServer(s);
+    final api = QBitApi();
+    api.setServer(s);
+    // 清旧会话并登录新服务器（失败也无妨，主界面轮询会自愈）
+    unawaited(api.connect());
+    await _load(); // 重新读取，刷新「使用中」标记
+    if (!mounted) return;
+    _toast('已切换到 ${_label(s)}', ok: true);
+    widget.onSwitched?.call();
+  }
+
+  Future<void> _confirmDelete(ServerConfig s) async {
+    if (_isActive(s)) {
+      _toast('当前使用中的服务器无法删除', ok: false);
+      return;
+    }
+    showCupertinoModalPopup<void>(
+      context: context,
+      builder: (ctx) => CupertinoActionSheet(
+        title: Text('删除服务器「${_label(s)}」？'),
+        actions: [
+          CupertinoActionSheetAction(
+            isDestructiveAction: true,
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await QBitApi.removeServer(s);
+              await _load();
+              if (mounted) _toast('已删除', ok: true);
+            },
+            child: const Text('删除'),
+          ),
+        ],
+        cancelButton: CupertinoActionSheetAction(
+          onPressed: () => Navigator.pop(ctx),
+          child: const Text('取消'),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _addServer() async {
+    // 进入登录页添加；保存后它会 upsert 并 Get.offAll 到新的 MainScreen
+    await Get.to(() => const LoginScreen());
+    // 返回后（取消的情况）刷新一次列表
+    await _load();
+  }
+
+  String _label(ServerConfig s) =>
+      s.name.isNotEmpty ? s.name : s.url.replaceFirst(RegExp(r'^https?://'), '');
+
+  void _toast(String msg, {required bool ok}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: ok ? const Color(0xFF34C759) : const Color(0xFFFF3B30),
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(milliseconds: 1400),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      bottom: false,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(20, 10, 20, 24),
+        children: [
+          const SizedBox(height: 6),
+          const Text(
+            '设置',
+            style: TextStyle(
+              fontSize: 34,
+              fontWeight: FontWeight.w800,
+              color: _ink,
+              letterSpacing: -0.5,
+            ),
+          ),
+          const SizedBox(height: 24),
+          const Padding(
+            padding: EdgeInsets.only(left: 4, bottom: 8),
+            child: Text('服务器',
+                style: TextStyle(fontSize: 13, color: _inkMuted)),
+          ),
+          if (_loading)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 40),
+              child: Center(child: CupertinoActivityIndicator()),
+            )
+          else
+            _buildServerCard(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildServerCard() {
+    final rows = <Widget>[];
+    for (var i = 0; i < _servers.length; i++) {
+      final s = _servers[i];
+      rows.add(_buildServerRow(s));
+      rows.add(_hairline());
+    }
+    // 末尾「添加服务器」行
+    rows.add(_buildAddRow());
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+              color: Colors.black.withOpacity(0.02),
+              blurRadius: 10,
+              offset: const Offset(0, 4)),
+        ],
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(children: rows),
+    );
+  }
+
+  Widget _hairline() =>
+      Container(height: 0.5, color: const Color(0xFFE5E5EA), margin: const EdgeInsets.only(left: 16));
+
+  Widget _buildServerRow(ServerConfig s) {
+    final active = _isActive(s);
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => _switchTo(s),
+      onLongPress: () => _confirmDelete(s),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: Row(
+          children: [
+            Icon(
+              active
+                  ? CupertinoIcons.checkmark_circle_fill
+                  : CupertinoIcons.circle,
+              color: active ? _accent : const Color(0xFFC7C7CC),
+              size: 22,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _label(s),
+                    style: TextStyle(
+                        fontSize: 16,
+                        color: _ink,
+                        fontWeight:
+                            active ? FontWeight.w700 : FontWeight.w500),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '${s.url}  ·  ${s.username}',
+                    style: const TextStyle(fontSize: 12, color: _inkMuted),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+            if (active)
+              const Padding(
+                padding: EdgeInsets.only(left: 8),
+                child: Text('使用中',
+                    style: TextStyle(
+                        fontSize: 12,
+                        color: _accent,
+                        fontWeight: FontWeight.w600)),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAddRow() {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: _addServer,
+      child: const Padding(
+        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 15),
+        child: Row(
+          children: [
+            Icon(CupertinoIcons.add_circled_solid, color: _accent, size: 22),
+            SizedBox(width: 12),
+            Text('添加服务器',
+                style: TextStyle(
+                    fontSize: 16, color: _accent, fontWeight: FontWeight.w600)),
+          ],
+        ),
       ),
     );
   }

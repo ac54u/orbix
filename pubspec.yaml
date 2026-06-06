@@ -16,6 +16,7 @@ dependencies:
   cookie_jar: ^4.0.8         # Cookie 存储器
   get: ^4.6.6                # 状态管理
   shared_preferences: ^2.2.2 # 用于本地保存服务器 IP 和账号密码
+  file_picker: ^8.1.2        # 选择本地 .torrent 文件上传
 
 dev_dependencies:
   flutter_test:
