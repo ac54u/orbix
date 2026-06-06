@@ -1,14 +1,48 @@
+import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:dio_cookie_manager/dio_cookie_manager.dart';
 import 'package:cookie_jar/cookie_jar.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ServerConfig {
+  String name;
   String url;
   String username;
   String password;
+  // 保留原始字段，便于设置页展示与回填编辑（旧调用不传也能用）
+  String host;
+  String port;
+  bool https;
 
-  ServerConfig({required this.url, required this.username, required this.password});
+  ServerConfig({
+    this.name = '',
+    required this.url,
+    required this.username,
+    required this.password,
+    this.host = '',
+    this.port = '',
+    this.https = false,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'name': name,
+        'url': url,
+        'username': username,
+        'password': password,
+        'host': host,
+        'port': port,
+        'https': https,
+      };
+
+  factory ServerConfig.fromJson(Map<String, dynamic> j) => ServerConfig(
+        name: (j['name'] ?? '').toString(),
+        url: (j['url'] ?? '').toString(),
+        username: (j['username'] ?? '').toString(),
+        password: (j['password'] ?? '').toString(),
+        host: (j['host'] ?? '').toString(),
+        port: (j['port'] ?? '').toString(),
+        https: j['https'] == true,
+      );
 }
 
 /// 连接测试的结果分类，便于 UI 给出准确提示
@@ -105,7 +139,94 @@ class QBitApi {
     }
 
     final url = buildUrl(host, port ?? '', https);
-    return ServerConfig(url: url, username: username.trim(), password: password);
+    return ServerConfig(
+      name: prefs.getString('qbit_name') ?? '',
+      url: url,
+      username: username.trim(),
+      password: password,
+      host: host.trim(),
+      port: (port ?? '').trim(),
+      https: https,
+    );
+  }
+
+  // ——— 多服务器管理（设置页「切换服务器」用）———
+  // 设计：`qbit_servers` 存服务器列表（JSON）；扁平 key 表示「当前活动服务器」，
+  // 由 loadSavedConfig() 读取，供自动登录与主界面使用。两者保持同步。
+  static const String _kServers = 'qbit_servers';
+
+  /// 读取已保存的服务器列表。首次会把旧版单服务器迁移成列表。
+  static Future<List<ServerConfig>> loadServers() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_kServers);
+    if (raw != null && raw.isNotEmpty) {
+      try {
+        final list = (jsonDecode(raw) as List)
+            .map((e) => ServerConfig.fromJson(Map<String, dynamic>.from(e)))
+            .where((s) => s.url.isNotEmpty)
+            .toList();
+        return list;
+      } catch (_) {
+        // 解析失败则回退到迁移逻辑
+      }
+    }
+    // 迁移：旧版单服务器（扁平 key）→ 列表
+    final legacy = await loadSavedConfig();
+    if (legacy != null) {
+      await _saveServers([legacy]);
+      return [legacy];
+    }
+    return [];
+  }
+
+  static Future<void> _saveServers(List<ServerConfig> servers) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+        _kServers, jsonEncode(servers.map((s) => s.toJson()).toList()));
+  }
+
+  /// 新增/更新一个服务器（按 url+username 去重）。
+  static Future<void> upsertServer(ServerConfig s) async {
+    final list = await loadServers();
+    final idx =
+        list.indexWhere((e) => e.url == s.url && e.username == s.username);
+    if (idx >= 0) {
+      list[idx] = s;
+    } else {
+      list.add(s);
+    }
+    await _saveServers(list);
+  }
+
+  /// 删除一个服务器。
+  static Future<void> removeServer(ServerConfig s) async {
+    final list = await loadServers();
+    list.removeWhere((e) => e.url == s.url && e.username == s.username);
+    await _saveServers(list);
+  }
+
+  /// 把某服务器设为「当前活动服务器」：写回扁平 key，
+  /// 这样下次自动登录 / loadSavedConfig() 都会用它。
+  static Future<void> setActiveServer(ServerConfig s) async {
+    final prefs = await SharedPreferences.getInstance();
+    String host = s.host, port = s.port;
+    bool https = s.https;
+    // 兼容只带 url 的旧记录：从 url 反推 host/port/https
+    if (host.isEmpty) {
+      final u = Uri.tryParse(s.url);
+      if (u != null) {
+        https = u.scheme == 'https';
+        host = u.host;
+        port = u.hasPort ? u.port.toString() : '';
+      }
+    }
+    await prefs.setString('qbit_name', s.name);
+    await prefs.setString('qbit_host', host);
+    await prefs.setString('qbit_port', port);
+    await prefs.setString('qbit_username', s.username);
+    await prefs.setString('qbit_password', s.password);
+    await prefs.setBool('qbit_https', https);
+    await prefs.remove('qbit_url');
   }
 
   // 1. 登录并获取 Cookie（带详细结果，供测试连接使用）
@@ -195,6 +316,89 @@ class QBitApi {
     final r = await _authedGet('/api/v2/transfer/info');
     final data = r?.data;
     return data is Map ? Map<String, dynamic>.from(data) : {};
+  }
+
+  // ——— 种子操作（长按菜单）———
+  // qBittorrent v5.x（Web API 2.11+）把 resume/pause 改名为 start/stop。
+  // 这些接口成功时返回 200。
+
+  /// 启动（继续）
+  Future<bool> startTorrent(String hash) =>
+      _torrentAction('/api/v2/torrents/start', {'hashes': hash});
+
+  /// 暂停（停止）
+  Future<bool> stopTorrent(String hash) =>
+      _torrentAction('/api/v2/torrents/stop', {'hashes': hash});
+
+  /// 强制启动（无视队列/做种限制）
+  Future<bool> forceStartTorrent(String hash) => _torrentAction(
+      '/api/v2/torrents/setForceStart', {'hashes': hash, 'value': 'true'});
+
+  /// 强制重新校验
+  Future<bool> recheckTorrent(String hash) =>
+      _torrentAction('/api/v2/torrents/recheck', {'hashes': hash});
+
+  /// 强制重新汇报（向 Tracker 重新汇报）
+  Future<bool> reannounceTorrent(String hash) =>
+      _torrentAction('/api/v2/torrents/reannounce', {'hashes': hash});
+
+  /// 删除任务；deleteFiles=true 时连同已下载文件一并删除
+  Future<bool> deleteTorrent(String hash, {bool deleteFiles = false}) =>
+      _torrentAction('/api/v2/torrents/delete',
+          {'hashes': hash, 'deleteFiles': deleteFiles ? 'true' : 'false'});
+
+  // ——— 添加任务 ———
+
+  /// 添加磁力链接 / 种子 URL（支持多行，每行一个）
+  Future<bool> addMagnet(String urls) =>
+      _postAdd(() => FormData.fromMap({'urls': urls}));
+
+  /// 添加本地 .torrent 文件（字节）
+  Future<bool> addTorrentBytes(List<int> bytes, String filename) => _postAdd(
+      () => FormData.fromMap(
+          {'torrents': MultipartFile.fromBytes(bytes, filename: filename)}));
+
+  /// POST /api/v2/torrents/add，401/403 自动重登重试。
+  /// FormData 是一次性的（流读完即失效），重试时用 build() 重新构造。
+  Future<bool> _postAdd(FormData Function() build) async {
+    final opts = Options(validateStatus: (s) => s != null && s < 500);
+    bool isOk(Response r) =>
+        r.statusCode == 200 &&
+        !r.data.toString().toLowerCase().contains('fail');
+    try {
+      var r = await _dio.post('/api/v2/torrents/add',
+          data: build(), options: opts);
+      if (r.statusCode == 401 || r.statusCode == 403) {
+        final res = await connect();
+        if (!res.success) return false;
+        r = await _dio.post('/api/v2/torrents/add',
+            data: build(), options: opts);
+      }
+      return isOk(r);
+    } on DioException catch (e) {
+      print("添加任务失败: $e");
+      return false;
+    }
+  }
+
+  /// 带会话保活的种子操作 POST：401/403（会话过期）时自动重登一次再重试。
+  Future<bool> _torrentAction(String path, Map<String, dynamic> form) async {
+    final opts = Options(
+      contentType: Headers.formUrlEncodedContentType,
+      validateStatus: (s) => s != null && s < 500,
+    );
+    try {
+      var r = await _dio.post(path, data: form, options: opts);
+      if (r.statusCode == 401 || r.statusCode == 403) {
+        final res = await connect(); // 清旧 cookie 并重新登录
+        if (!res.success) return false;
+        r = await _dio.post(path, data: form, options: opts);
+      }
+      return r.statusCode == 200;
+    } on DioException catch (e) {
+      print("操作失败 $path: $e");
+      return false;
+    }
   }
 
   /// 带会话保活的 GET：遇到 401/403（会话过期）时自动重新登录并重试一次。

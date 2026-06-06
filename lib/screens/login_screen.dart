@@ -118,12 +118,20 @@ class _LoginScreenState extends State<LoginScreen> {
     await prefs.setBool('qbit_https', _useHttps);
     await prefs.remove('qbit_url'); // 清理旧版遗留键
 
-    final api = QBitApi();
-    api.setServer(ServerConfig(
+    final cfg = ServerConfig(
+      name: _nameController.text.trim(),
       url: _buildUrl(),
       username: username,
       password: _passwordController.text.trim(),
-    ));
+      host: host,
+      port: _portController.text.trim(),
+      https: _useHttps,
+    );
+    // 加入/更新服务器列表（供设置页切换）
+    await QBitApi.upsertServer(cfg);
+
+    final api = QBitApi();
+    api.setServer(cfg);
     Get.offAll(() => const MainScreen());
   }
 
