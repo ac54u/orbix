@@ -27,7 +27,6 @@ class TorrentController extends GetxController {
       _fetchData();
     });
   }
-  }
 
   void _fetchData() async {
     final data = await api.syncMainData(_rid);
