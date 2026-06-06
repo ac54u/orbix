@@ -23,14 +23,46 @@ jobs:
       - name: Install Dependencies
         run: flutter pub get
 
-      # 【核心修复】强行修改 Xcode 项目配置，关闭所有强制签名要求
-      - name: Disable Xcode Auto Code Signing
-        run: |
-          sed -i '' 's/CODE_SIGN_STYLE = Automatic;/CODE_SIGN_STYLE = Manual;/g' ios/Runner.xcodeproj/project.pbxproj
-          sed -i '' 's/CODE_SIGNING_REQUIRED = YES/CODE_SIGNING_REQUIRED = NO/g' ios/Runner.xcodeproj/project.pbxproj
-          sed -i '' 's/CODE_SIGNING_ALLOWED = YES/CODE_SIGNING_ALLOWED = NO/g' ios/Runner.xcodeproj/project.pbxproj
+      # 关键步骤1：只生成 iOS 目录和配置，不进行实际编译
+      - name: Prepare iOS Project & Pods
+        run: flutter build ios --config-only
 
-      - name: Build iOS (No Codesign)
+      # 关键步骤2：使用 Ruby 脚本强行剥离所有目标工程的签名要求
+      - name: Force Disable All Code Signing (Nuclear Option)
+        run: |
+          gem install xcodeproj --no-document
+          cat << 'EOF' > disable_signing.rb
+          require 'xcodeproj'
+
+          def disable_signing(project_path)
+            return unless File.exist?(project_path)
+            project = Xcodeproj::Project.open(project_path)
+
+            project.build_configurations.each do |config|
+              config.build_settings['CODE_SIGNING_ALLOWED'] = 'NO'
+              config.build_settings['CODE_SIGNING_REQUIRED'] = 'NO'
+              config.build_settings['CODE_SIGN_IDENTITY'] = ''
+              config.build_settings['EXPANDED_CODE_SIGN_IDENTITY'] = ''
+            end
+
+            project.targets.each do |target|
+              target.build_configurations.each do |config|
+                config.build_settings['CODE_SIGNING_ALLOWED'] = 'NO'
+                config.build_settings['CODE_SIGNING_REQUIRED'] = 'NO'
+                config.build_settings['CODE_SIGN_IDENTITY'] = ''
+                config.build_settings['EXPANDED_CODE_SIGN_IDENTITY'] = ''
+              end
+            end
+            project.save
+          end
+
+          # 同时干掉主工程和 Pods 插件工程的签名
+          disable_signing('ios/Runner.xcodeproj')
+          disable_signing('ios/Pods/Pods.xcodeproj')
+          EOF
+          ruby disable_signing.rb
+
+      - name: Build iOS (Unsigned)
         run: flutter build ios --release --no-codesign
 
       - name: Package Unsigned IPA
