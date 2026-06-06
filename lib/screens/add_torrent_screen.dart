@@ -95,16 +95,16 @@ class _AddTorrentScreenState extends State<AddTorrentScreen> {
     final tags = _tagsController.text.trim();
     final path = _pathController.text.trim();
 
-    bool ok;
+    String? error;
     if (_isLinkMode) {
-      ok = await QBitApi().addMagnet(
+      error = await QBitApi().addMagnet(
         _linkController.text.trim(),
         category: category,
         tags: tags,
         savePath: path,
       );
     } else {
-      ok = await QBitApi().addTorrentBytes(
+      error = await QBitApi().addTorrentBytes(
         _pickedBytes!,
         _pickedName!,
         category: category,
@@ -116,11 +116,11 @@ class _AddTorrentScreenState extends State<AddTorrentScreen> {
     if (!mounted) return;
     setState(() => _submitting = false);
 
-    if (ok) {
+    if (error == null) {
       Get.back(result: true);
       _snack('任务已添加到下载队列', ok: true);
     } else {
-      _snack('添加失败，请检查链接/文件或服务器', ok: false);
+      _snack(error, ok: false);
     }
   }
 

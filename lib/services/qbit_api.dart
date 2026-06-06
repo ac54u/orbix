@@ -349,8 +349,9 @@ class QBitApi {
 
   // ——— 添加任务 ———
 
-  /// 添加磁力链接 / 种子 URL（支持多行，每行一个）；可带分类/标签/保存路径
-  Future<bool> addMagnet(
+  /// 添加磁力链接 / 种子 URL（支持多行，每行一个）；可带分类/标签/保存路径。
+  /// 返回 null＝成功；非空字符串＝失败原因（直接给用户看）。
+  Future<String?> addMagnet(
     String urls, {
     String? category,
     String? tags,
@@ -363,8 +364,9 @@ class QBitApi {
             savePath: savePath,
           )));
 
-  /// 添加本地 .torrent 文件（字节）；可带分类/标签/保存路径
-  Future<bool> addTorrentBytes(
+  /// 添加本地 .torrent 文件（字节）；可带分类/标签/保存路径。
+  /// 返回 null＝成功；非空字符串＝失败原因。
+  Future<String?> addTorrentBytes(
     List<int> bytes,
     String filename, {
     String? category,
@@ -399,33 +401,49 @@ class QBitApi {
 
   /// POST /api/v2/torrents/add，401/403 自动重登重试。
   /// FormData 是一次性的（流读完即失效），重试时用 build() 重新构造。
-  Future<bool> _postAdd(FormData Function() build) async {
+  /// 返回 null＝成功；非空字符串＝失败原因（用于直接提示用户、便于排查）。
+  Future<String?> _postAdd(FormData Function() build) async {
     // 放宽超时：上传 .torrent + qB 处理 + 远程往返常超过全局 3 秒，
     // 否则会“服务器已添加成功、客户端却超时报失败”。
+    // 关键：带上 Referer/Origin，否则开启 CSRF 校验的 qBittorrent 会 403，
+    // 即便登录成功也无法添加（登录请求本就带了这两个头）。
     final opts = Options(
       validateStatus: (s) => s != null && s < 500,
       sendTimeout: const Duration(seconds: 30),
       receiveTimeout: const Duration(seconds: 30),
+      headers: {
+        if (currentServer != null) 'Referer': currentServer!.url,
+        if (currentServer != null) 'Origin': currentServer!.url,
+      },
     );
-    // 成功判定放宽到所有 2xx（不同版本可能返回 200 "Ok." 或 204 空响应）
-    bool isOk(Response r) {
-      final code = r.statusCode ?? 0;
-      if (code < 200 || code >= 300) return false;
-      return !r.data.toString().toLowerCase().contains('fail');
-    }
     try {
       var r = await _dio.post('/api/v2/torrents/add',
           data: build(), options: opts);
       if (r.statusCode == 401 || r.statusCode == 403) {
         final res = await connect();
-        if (!res.success) return false;
+        if (!res.success) return '登录已失效：${res.message}';
         r = await _dio.post('/api/v2/torrents/add',
             data: build(), options: opts);
       }
-      return isOk(r);
+      final code = r.statusCode ?? 0;
+      if (code == 403) return '服务器拒绝（403），可能开启了 CSRF/Host 校验';
+      if (code == 415) return '不支持的请求格式（415）';
+      if (code < 200 || code >= 300) return '服务器返回状态码 $code';
+      // 不同版本成功返回 200 "Ok." 或 204 空响应；"Fails." 才是失败
+      if (r.data.toString().toLowerCase().contains('fail')) {
+        return '服务器拒绝该种子（链接无效或已存在）';
+      }
+      return null;
     } on DioException catch (e) {
       print("添加任务失败: $e");
-      return false;
+      // 字节已完整发出、服务器已收到并同步处理，只是回执没按时回来。
+      // 这种 send/receive 超时按“已添加”处理，避免“服务器加成功、客户端误报失败”。
+      // （后续列表刷新会确认结果；真正没加上时也只是少一条，可重试。）
+      if (e.type == DioExceptionType.sendTimeout ||
+          e.type == DioExceptionType.receiveTimeout) {
+        return null;
+      }
+      return _describeDioError(e);
     }
   }
 
