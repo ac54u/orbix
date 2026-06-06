@@ -5,6 +5,7 @@ import 'package:get/get.dart';
 import '../services/qbit_api.dart';
 import 'login_screen.dart';
 import 'add_torrent_screen.dart';
+import '../theme/app_colors.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -308,7 +309,7 @@ class _MainScreenState extends State<MainScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F5F9),
+      backgroundColor: AppColors.of(AppColors.mainBg),
       body: SafeArea(
         child: Column(
           children: [
@@ -330,7 +331,7 @@ class _MainScreenState extends State<MainScreen> {
                 ],
               ),
             ),
-            Container(height: 1, color: Colors.grey.withOpacity(0.1)),
+            Container(height: 1, color: AppColors.of(AppColors.separator)),
           ],
         ),
       ),
@@ -338,13 +339,13 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
-  // 各页统一的大标题样式
-  static const TextStyle _pageTitleStyle = TextStyle(
-    fontSize: 34,
-    fontWeight: FontWeight.w800,
-    color: Color(0xFF1C1C1E),
-    letterSpacing: -0.5,
-  );
+  // 各页统一的大标题样式（颜色随明暗动态解析，故为 getter 而非 const）
+  TextStyle get _pageTitleStyle => TextStyle(
+        fontSize: 34,
+        fontWeight: FontWeight.w800,
+        color: AppColors.of(AppColors.label),
+        letterSpacing: -0.5,
+      );
 
   // 占位页（统计/搜索）：同样固定标题，内容居中
   Widget _buildSimplePage(String title, IconData icon) {
@@ -363,7 +364,7 @@ class _MainScreenState extends State<MainScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(icon, size: 48, color: const Color(0xFFC7C7CC)),
+                Icon(icon, size: 48, color: AppColors.of(AppColors.placeholder)),
                 const SizedBox(height: 12),
                 Text("$title · 开发中",
                     style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 16)),
@@ -390,7 +391,7 @@ class _MainScreenState extends State<MainScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text("种子", style: _pageTitleStyle),
+                  Text("种子", style: _pageTitleStyle),
                   GestureDetector(
                     behavior: HitTestBehavior.opaque,
                     onTap: () async {
@@ -456,7 +457,7 @@ class _MainScreenState extends State<MainScreen> {
               alignment: Alignment.center,
               padding: const EdgeInsets.symmetric(horizontal: 16),
               decoration: BoxDecoration(
-                color: selected ? const Color(0xFF007AFF) : Colors.white,
+                color: selected ? const Color(0xFF007AFF) : AppColors.of(AppColors.card),
                 borderRadius: BorderRadius.circular(17),
                 boxShadow: [
                   BoxShadow(
@@ -470,7 +471,7 @@ class _MainScreenState extends State<MainScreen> {
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-                  color: selected ? Colors.white : const Color(0xFF6E6E73),
+                  color: selected ? Colors.white : AppColors.of(AppColors.secondaryLabel),
                 ),
               ),
             ),
@@ -556,7 +557,7 @@ class _MainScreenState extends State<MainScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppColors.of(AppColors.card),
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10, offset: const Offset(0, 4)),
@@ -677,7 +678,7 @@ class _MainScreenState extends State<MainScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppColors.of(AppColors.card),
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10, offset: const Offset(0, 4)),
@@ -700,7 +701,7 @@ class _MainScreenState extends State<MainScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(title,
-                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Color(0xFF1C1C1E)),
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: AppColors.of(AppColors.label)),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis),
                     const SizedBox(height: 4),
@@ -728,7 +729,7 @@ class _MainScreenState extends State<MainScreen> {
               return Container(
                 height: 6,
                 width: constraints.maxWidth,
-                decoration: BoxDecoration(color: const Color(0xFFE5E5EA), borderRadius: BorderRadius.circular(3)),
+                decoration: BoxDecoration(color: AppColors.of(AppColors.separator), borderRadius: BorderRadius.circular(3)),
                 child: Row(
                   children: [
                     Container(
@@ -761,7 +762,7 @@ class _MainScreenState extends State<MainScreen> {
       children: [
         Icon(icon, size: 14, color: iconColor),
         const SizedBox(width: 4),
-        Text(text, style: const TextStyle(fontSize: 12, color: Color(0xFF6E6E73), fontWeight: FontWeight.w500)),
+        Text(text, style: TextStyle(fontSize: 12, color: AppColors.of(AppColors.secondaryLabel), fontWeight: FontWeight.w500)),
       ],
     );
   }
@@ -769,9 +770,9 @@ class _MainScreenState extends State<MainScreen> {
   Widget _buildBottomNav() {
     return Container(
       padding: const EdgeInsets.only(top: 10, bottom: 20),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, -2))],
+      decoration: BoxDecoration(
+        color: AppColors.of(AppColors.card),
+        boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, -2))],
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -816,8 +817,8 @@ class ServerSettingsPage extends StatefulWidget {
 
 class _ServerSettingsPageState extends State<ServerSettingsPage> {
   static const Color _accent = Color(0xFF007AFF);
-  static const Color _ink = Color(0xFF1C1C1E);
-  static const Color _inkMuted = Color(0xFF8E8E93);
+  static const Color _inkMuted = Color(0xFF8E8E93); // 中性灰，明暗皆可读
+  Color get _ink => AppColors.of(AppColors.label); // 主文字，随明暗动态解析
 
   List<ServerConfig> _servers = [];
   // 当前活动服务器用 url + username 共同标识（同地址可能多个账号）
@@ -921,8 +922,8 @@ class _ServerSettingsPageState extends State<ServerSettingsPage> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // —— 固定标题 ——
-          const Padding(
-            padding: EdgeInsets.fromLTRB(20, 10, 20, 0),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
             child: Align(
               alignment: Alignment.centerLeft,
               child: Text(
@@ -972,7 +973,7 @@ class _ServerSettingsPageState extends State<ServerSettingsPage> {
     rows.add(_buildAddRow());
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppColors.of(AppColors.card),
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
@@ -987,7 +988,7 @@ class _ServerSettingsPageState extends State<ServerSettingsPage> {
   }
 
   Widget _hairline() =>
-      Container(height: 0.5, color: const Color(0xFFE5E5EA), margin: const EdgeInsets.only(left: 16));
+      Container(height: 0.5, color: AppColors.of(AppColors.separator), margin: const EdgeInsets.only(left: 16));
 
   Widget _buildServerRow(ServerConfig s) {
     final active = _isActive(s);
@@ -1003,7 +1004,7 @@ class _ServerSettingsPageState extends State<ServerSettingsPage> {
               active
                   ? CupertinoIcons.checkmark_circle_fill
                   : CupertinoIcons.circle,
-              color: active ? _accent : const Color(0xFFC7C7CC),
+              color: active ? _accent : AppColors.of(AppColors.placeholder),
               size: 22,
             ),
             const SizedBox(width: 12),

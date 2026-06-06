@@ -4,6 +4,7 @@ import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/qbit_api.dart';
 import 'main_screen.dart';
+import '../theme/app_colors.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -14,16 +15,18 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   // 色彩与样式常量，匹配 iOS 设置页风格
-  static const Color _bgColor = Color(0xFFF2F2F7);
-  static const Color _cardColor = Colors.white;
-  static const Color _hairline = Color(0xFFE5E5EA);
-  static const Color _textColor = Color(0xFF1C1C1E); // 近黑带暖调，非纯黑
-  static const Color _placeholderColor = Color(0xFFB0B0B5);
-  static const Color _sectionTitleColor = Color(0xFF6E6E73); // 加深以过对比度
+  // 强调/状态色固定（明暗皆可读），结构色随系统明暗动态解析
   static const Color _accent = CupertinoColors.activeBlue;
   static const Color _errorColor = CupertinoColors.destructiveRed;
   static const Color _successColor = Color(0xFF34C759);
   static const double _radius = 12.0;
+  // 动态结构色
+  Color get _bgColor => AppColors.of(AppColors.groupedBg);
+  Color get _cardColor => AppColors.of(AppColors.card);
+  Color get _hairline => AppColors.of(AppColors.separator);
+  Color get _textColor => AppColors.of(AppColors.label);
+  Color get _placeholderColor => AppColors.of(AppColors.placeholder);
+  Color get _sectionTitleColor => AppColors.of(AppColors.secondaryLabel);
 
   // 表单控制器
   final TextEditingController _nameController = TextEditingController();
@@ -177,7 +180,7 @@ class _LoginScreenState extends State<LoginScreen> {
         elevation: 0,
         scrolledUnderElevation: 0,
         centerTitle: true,
-        title: const Text('添加服务器',
+        title: Text('添加服务器',
             style: TextStyle(color: _textColor, fontSize: 17, fontWeight: FontWeight.w600)),
         leading: canPop
             ? CupertinoButton(
@@ -243,9 +246,9 @@ class _LoginScreenState extends State<LoginScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Row(
-                        children: const [
+                        children: [
                           Icon(CupertinoIcons.lock_shield, color: _sectionTitleColor, size: 20),
-                          SizedBox(width: 10),
+                          const SizedBox(width: 10),
                           Text('使用 HTTPS', style: TextStyle(fontSize: 16, color: _textColor)),
                         ],
                       ),
@@ -277,7 +280,7 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget _buildSectionHeader(String title) {
     return Padding(
       padding: const EdgeInsets.only(left: 16, bottom: 6, top: 24),
-      child: Text(title, style: const TextStyle(color: _sectionTitleColor, fontSize: 13)),
+      child: Text(title, style: TextStyle(color: _sectionTitleColor, fontSize: 13)),
     );
   }
 
@@ -307,7 +310,7 @@ class _LoginScreenState extends State<LoginScreen> {
         // 修复点：border 需要 Border，而非 BorderSide
         border: isLast
             ? null
-            : const Border(bottom: BorderSide(color: _hairline, width: 0.5)),
+            : Border(bottom: BorderSide(color: _hairline, width: 0.5)),
       ),
       child: CupertinoTextField(
         controller: controller,
@@ -315,8 +318,8 @@ class _LoginScreenState extends State<LoginScreen> {
         keyboardType: keyboardType,
         padding: const EdgeInsets.symmetric(vertical: 14),
         placeholder: placeholder,
-        placeholderStyle: const TextStyle(color: _placeholderColor, fontSize: 16),
-        style: const TextStyle(color: _textColor, fontSize: 16),
+        placeholderStyle: TextStyle(color: _placeholderColor, fontSize: 16),
+        style: TextStyle(color: _textColor, fontSize: 16),
         cursorColor: _accent,
         prefix: Padding(
           padding: const EdgeInsets.only(left: 16, right: 12),
@@ -359,7 +362,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
     if (r.success) {
       return [
-        const Divider(height: 1, thickness: 0.5, color: _hairline),
+        Divider(height: 1, thickness: 0.5, color: _hairline),
         Padding(
           padding: const EdgeInsets.all(16),
           child: Row(
@@ -394,7 +397,7 @@ class _LoginScreenState extends State<LoginScreen> {
     }
 
     return [
-      const Divider(height: 1, thickness: 0.5, color: _hairline),
+      Divider(height: 1, thickness: 0.5, color: _hairline),
       Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -415,11 +418,11 @@ class _LoginScreenState extends State<LoginScreen> {
             ...hints.map((h) => Padding(
                   padding: const EdgeInsets.only(bottom: 4),
                   child: Text('• $h',
-                      style: const TextStyle(color: _sectionTitleColor, fontSize: 13, height: 1.4)),
+                      style: TextStyle(color: _sectionTitleColor, fontSize: 13, height: 1.4)),
                 )),
             const SizedBox(height: 8),
             Text('详细信息：${r.message}',
-                style: const TextStyle(color: _placeholderColor, fontSize: 12, height: 1.4)),
+                style: TextStyle(color: _placeholderColor, fontSize: 12, height: 1.4)),
           ],
         ),
       ),

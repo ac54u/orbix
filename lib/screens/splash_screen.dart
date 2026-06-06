@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../services/qbit_api.dart';
+import '../theme/app_colors.dart';
 import 'main_screen.dart';
 import 'welcome_screen.dart';
 import 'login_screen.dart';
@@ -53,7 +54,7 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: AppColors.of(AppColors.plainBg),
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -82,12 +83,12 @@ class _SplashScreenState extends State<SplashScreen> {
                   color: Colors.white, size: 42),
             ),
             const SizedBox(height: 28),
-            const Text(
+            Text(
               "Orbix",
               style: TextStyle(
                 fontSize: 26,
                 fontWeight: FontWeight.w800,
-                color: Color(0xFF1C1C1E),
+                color: AppColors.of(AppColors.label),
                 letterSpacing: -0.5,
               ),
             ),

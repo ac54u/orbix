@@ -2,21 +2,18 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'login_screen.dart';
+import '../theme/app_colors.dart';
 
 class WelcomeScreen extends StatelessWidget {
   const WelcomeScreen({super.key});
 
-  // 与登录页一致的设计令牌
+  // 与登录页一致的设计令牌（强调色固定，其余结构色随明暗动态解析）
   static const Color _accent = Color(0xFF007AFF);
-  static const Color _ink = Color(0xFF1C1C1E);
-  static const Color _inkMuted = Color(0xFF6E6E73); // 过 4.5:1 对比
-  static const Color _tileBg = Color(0xFFF2F2F7);
-  static const Color _tileIconBg = Color(0xFFE5F0FF);
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: AppColors.of(AppColors.plainBg),
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24.0),
@@ -67,21 +64,21 @@ class WelcomeScreen extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 32),
-        const Text(
+        Text(
           "Orbix",
           style: TextStyle(
             fontSize: 34,
             fontWeight: FontWeight.w800,
-            color: _ink,
+            color: AppColors.of(AppColors.label),
             letterSpacing: -0.5, // 大字号收紧字距更精致
           ),
         ),
         const SizedBox(height: 8),
-        const Text(
+        Text(
           "qBittorrent 客户端",
           style: TextStyle(
             fontSize: 15,
-            color: _inkMuted,
+            color: AppColors.of(AppColors.secondaryLabel),
             fontWeight: FontWeight.w600,
             letterSpacing: 0.5,
           ),
@@ -171,7 +168,7 @@ class _FeatureTile extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
       decoration: BoxDecoration(
-        color: WelcomeScreen._tileBg,
+        color: AppColors.of(AppColors.card),
         borderRadius: BorderRadius.circular(16),
       ),
       child: Row(
@@ -179,8 +176,8 @@ class _FeatureTile extends StatelessWidget {
           Container(
             width: 44,
             height: 44,
-            decoration: const BoxDecoration(
-              color: WelcomeScreen._tileIconBg,
+            decoration: BoxDecoration(
+              color: AppColors.of(AppColors.accentSoftBg),
               shape: BoxShape.circle,
             ),
             child: Icon(icon, color: WelcomeScreen._accent, size: 22),
@@ -192,18 +189,18 @@ class _FeatureTile extends StatelessWidget {
               children: [
                 Text(
                   title,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
-                    color: WelcomeScreen._ink,
+                    color: AppColors.of(AppColors.label),
                   ),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   subtitle,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 13,
-                    color: WelcomeScreen._inkMuted,
+                    color: AppColors.of(AppColors.secondaryLabel),
                   ),
                 ),
               ],

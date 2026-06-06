@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:file_picker/file_picker.dart';
 import '../services/qbit_api.dart';
+import '../theme/app_colors.dart';
 
 class AddTorrentScreen extends StatefulWidget {
   const AddTorrentScreen({super.key});
@@ -27,14 +28,15 @@ class _AddTorrentScreenState extends State<AddTorrentScreen> {
   final TextEditingController _tagsController = TextEditingController();
   final TextEditingController _pathController = TextEditingController();
 
-  // 颜色常量
-  static const Color _bgColor = Color(0xFFF2F2F7);
-  static const Color _cardColor = Colors.white;
-  static const Color _textColor = Color(0xFF1C1C1E);
-  static const Color _hintColor = Color(0xFFC4C4C6);
+  // 颜色常量：强调色与中性灰固定（明暗皆可读），其余结构色动态解析
   static const Color _sectionColor = Color(0xFF8E8E93);
-  static const Color _dividerColor = Color(0xFFE5E5EA);
   static const Color _accent = Color(0xFF007AFF);
+  // 动态解析的结构色（随系统明暗变化）
+  Color get _bgColor => AppColors.of(AppColors.groupedBg);
+  Color get _cardColor => AppColors.of(AppColors.card);
+  Color get _textColor => AppColors.of(AppColors.label);
+  Color get _hintColor => AppColors.of(AppColors.placeholder);
+  Color get _dividerColor => AppColors.of(AppColors.separator);
 
   @override
   void initState() {
@@ -199,7 +201,7 @@ class _AddTorrentScreenState extends State<AddTorrentScreen> {
             onTap: () => Get.back(),
             isActive: true,
           ),
-          const Text(
+          Text(
             "添加种子",
             style: TextStyle(
               fontSize: 17,
@@ -225,7 +227,7 @@ class _AddTorrentScreenState extends State<AddTorrentScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: _cardColor,
           borderRadius: BorderRadius.circular(20),
         ),
         child: Text(
@@ -249,7 +251,7 @@ class _AddTorrentScreenState extends State<AddTorrentScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
         decoration: BoxDecoration(
-          color: active ? _accent : Colors.white,
+          color: active ? _accent : _cardColor,
           borderRadius: BorderRadius.circular(20),
         ),
         child: _submitting
@@ -301,7 +303,7 @@ class _AddTorrentScreenState extends State<AddTorrentScreen> {
         curve: Curves.easeOut,
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFFEFF3FF) : Colors.transparent,
+          color: isSelected ? AppColors.of(AppColors.accentSoftBg) : Colors.transparent,
           borderRadius: BorderRadius.circular(20),
         ),
         child: Text(
@@ -329,8 +331,8 @@ class _AddTorrentScreenState extends State<AddTorrentScreen> {
         maxLines: 5,
         autofocus: true,
         cursorColor: _accent,
-        style: const TextStyle(fontSize: 16, color: _textColor),
-        decoration: const InputDecoration(
+        style: TextStyle(fontSize: 16, color: _textColor),
+        decoration: InputDecoration(
           hintText: "磁力链接或种子 URL",
           hintStyle: TextStyle(color: _hintColor, fontSize: 16),
           border: InputBorder.none,
@@ -382,11 +384,11 @@ class _AddTorrentScreenState extends State<AddTorrentScreen> {
                   });
                   _refreshValid();
                 },
-                child: const Icon(CupertinoIcons.clear_circled_solid,
+                child: Icon(CupertinoIcons.clear_circled_solid,
                     color: _hintColor, size: 20),
               )
             else
-              const Icon(CupertinoIcons.chevron_right, color: _hintColor, size: 16),
+              Icon(CupertinoIcons.chevron_right, color: _hintColor, size: 16),
           ],
         ),
       ),
@@ -418,22 +420,22 @@ class _AddTorrentScreenState extends State<AddTorrentScreen> {
         // 修复点：border 需要 Border 而非 BorderSide
         border: isLast
             ? null
-            : const Border(bottom: BorderSide(color: _dividerColor, width: 0.5)),
+            : Border(bottom: BorderSide(color: _dividerColor, width: 0.5)),
       ),
       child: Row(
         children: [
           const SizedBox(width: 16),
-          Text(title, style: const TextStyle(fontSize: 16, color: _textColor)),
+          Text(title, style: TextStyle(fontSize: 16, color: _textColor)),
           const SizedBox(width: 16),
           Expanded(
             child: TextField(
               controller: controller,
               textAlign: TextAlign.right,
               cursorColor: _accent,
-              style: const TextStyle(fontSize: 16, color: _textColor),
+              style: TextStyle(fontSize: 16, color: _textColor),
               decoration: InputDecoration(
                 hintText: hint,
-                hintStyle: const TextStyle(color: _hintColor, fontSize: 15),
+                hintStyle: TextStyle(color: _hintColor, fontSize: 15),
                 border: InputBorder.none,
                 contentPadding:
                     const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
