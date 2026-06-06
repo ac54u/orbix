@@ -78,15 +78,9 @@ class _LoginScreenState extends State<LoginScreen> {
     });
   }
 
-  // 由 HTTPS 开关 + 主机 + 端口拼出最终 URL（开关说了算，自动去掉用户误输的协议头）
-  String _buildUrl() {
-    String host = _hostController.text.trim();
-    host = host.replaceFirst(RegExp(r'^https?://'), ''); // 去协议
-    host = host.replaceAll(RegExp(r'/+$'), ''); // 去结尾斜杠
-    final scheme = _useHttps ? 'https' : 'http';
-    final port = _portController.text.trim();
-    return port.isNotEmpty ? '$scheme://$host:$port' : '$scheme://$host';
-  }
+  // 由 HTTPS 开关 + 主机 + 端口拼出最终 URL（智能容错见 QBitApi.buildUrl）
+  String _buildUrl() =>
+      QBitApi.buildUrl(_hostController.text, _portController.text, _useHttps);
 
   void _toast(String title, String msg, {bool error = false}) {
     Get.snackbar(

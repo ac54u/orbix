@@ -44,6 +44,40 @@ class QBitApi {
     _dio.options.baseUrl = config.url;
   }
 
+  /// 智能拼接服务器 URL，容错常见填写错误：
+  ///  - 主机里粘贴了完整网址 → 以其协议/端口为准
+  ///  - 端口 443 → 强制 https；端口 80 → 强制 http（端口比开关更可靠）
+  ///  - 协议默认端口（https:443 / http:80）自动省略
+  static String buildUrl(String hostRaw, String portRaw, bool https) {
+    final host0 = hostRaw.trim();
+    final port = portRaw.trim();
+
+    // 用户直接粘贴了完整 URL：以 URL 内的协议/端口为准
+    if (RegExp(r'^https?://', caseSensitive: false).hasMatch(host0)) {
+      final u = Uri.tryParse(host0);
+      if (u != null && u.host.isNotEmpty) {
+        final s = u.scheme.toLowerCase();
+        if (u.hasPort) return '$s://${u.host}:${u.port}';
+        if (port.isNotEmpty) return '$s://${u.host}:$port';
+        return '$s://${u.host}';
+      }
+    }
+
+    final host = host0.replaceAll(RegExp(r'/+$'), ''); // 去结尾斜杠
+    String scheme;
+    if (port == '443') {
+      scheme = 'https';
+    } else if (port == '80') {
+      scheme = 'http';
+    } else {
+      scheme = https ? 'https' : 'http';
+    }
+    final isDefaultPort =
+        (scheme == 'https' && port == '443') || (scheme == 'http' && port == '80');
+    if (port.isEmpty || isDefaultPort) return '$scheme://$host';
+    return '$scheme://$host:$port';
+  }
+
   /// 从本地读取已保存的服务器配置；没有有效配置时返回 null。
   /// 同时兼容旧版本保存的完整 qbit_url。
   static Future<ServerConfig?> loadSavedConfig() async {
@@ -70,12 +104,7 @@ class QBitApi {
       return null;
     }
 
-    host = host.replaceFirst(RegExp(r'^https?://'), '').replaceAll(RegExp(r'/+$'), '');
-    final scheme = https ? 'https' : 'http';
-    final url = (port != null && port.trim().isNotEmpty)
-        ? '$scheme://$host:$port'
-        : '$scheme://$host';
-
+    final url = buildUrl(host, port ?? '', https);
     return ServerConfig(url: url, username: username.trim(), password: password);
   }
 
