@@ -349,14 +349,53 @@ class QBitApi {
 
   // ——— 添加任务 ———
 
-  /// 添加磁力链接 / 种子 URL（支持多行，每行一个）
-  Future<bool> addMagnet(String urls) =>
-      _postAdd(() => FormData.fromMap({'urls': urls}));
+  /// 添加磁力链接 / 种子 URL（支持多行，每行一个）；可带分类/标签/保存路径
+  Future<bool> addMagnet(
+    String urls, {
+    String? category,
+    String? tags,
+    String? savePath,
+  }) =>
+      _postAdd(() => FormData.fromMap(_addFields(
+            {'urls': urls},
+            category: category,
+            tags: tags,
+            savePath: savePath,
+          )));
 
-  /// 添加本地 .torrent 文件（字节）
-  Future<bool> addTorrentBytes(List<int> bytes, String filename) => _postAdd(
-      () => FormData.fromMap(
-          {'torrents': MultipartFile.fromBytes(bytes, filename: filename)}));
+  /// 添加本地 .torrent 文件（字节）；可带分类/标签/保存路径
+  Future<bool> addTorrentBytes(
+    List<int> bytes,
+    String filename, {
+    String? category,
+    String? tags,
+    String? savePath,
+  }) =>
+      _postAdd(() => FormData.fromMap(_addFields(
+            {'torrents': MultipartFile.fromBytes(bytes, filename: filename)},
+            category: category,
+            tags: tags,
+            savePath: savePath,
+          )));
+
+  /// 把可选的分类/标签/保存路径并入 add 表单（空值不发，避免覆盖服务器默认）
+  Map<String, dynamic> _addFields(
+    Map<String, dynamic> base, {
+    String? category,
+    String? tags,
+    String? savePath,
+  }) {
+    if (category != null && category.trim().isNotEmpty) {
+      base['category'] = category.trim();
+    }
+    if (tags != null && tags.trim().isNotEmpty) {
+      base['tags'] = tags.trim();
+    }
+    if (savePath != null && savePath.trim().isNotEmpty) {
+      base['savepath'] = savePath.trim();
+    }
+    return base;
+  }
 
   /// POST /api/v2/torrents/add，401/403 自动重登重试。
   /// FormData 是一次性的（流读完即失效），重试时用 build() 重新构造。

@@ -1,10 +1,10 @@
 import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:get/get.dart';
 import '../services/qbit_api.dart';
 import 'login_screen.dart';
+import 'add_torrent_screen.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -169,135 +169,6 @@ class _MainScreenState extends State<MainScreen> {
     }
   }
 
-  void _showFilterMenu() {
-    const options = [
-      ['all', '全部'],
-      ['downloading', '下载中'],
-      ['seeding', '做种中'],
-      ['active', '活动中'],
-      ['paused', '已暂停'],
-      ['completed', '已完成'],
-    ];
-    showCupertinoModalPopup<void>(
-      context: context,
-      builder: (ctx) => CupertinoActionSheet(
-        title: const Text('筛选'),
-        actions: options.map((o) {
-          final selected = _filter == o[0];
-          return CupertinoActionSheetAction(
-            onPressed: () {
-              Navigator.pop(ctx);
-              setState(() => _filter = o[0]);
-            },
-            child: Text(
-              o[1],
-              style: TextStyle(
-                fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
-                color: selected
-                    ? const Color(0xFF007AFF)
-                    : const Color(0xFF1C1C1E),
-              ),
-            ),
-          );
-        }).toList(),
-        cancelButton: CupertinoActionSheetAction(
-          onPressed: () => Navigator.pop(ctx),
-          child: const Text('取消'),
-        ),
-      ),
-    );
-  }
-
-  // —— 添加任务 ——
-
-  void _showAddMenu() {
-    showCupertinoModalPopup<void>(
-      context: context,
-      builder: (ctx) => CupertinoActionSheet(
-        title: const Text('添加任务'),
-        actions: [
-          CupertinoActionSheetAction(
-            onPressed: () {
-              Navigator.pop(ctx);
-              _showAddMagnetDialog();
-            },
-            child: const Text('添加磁力链接'),
-          ),
-          CupertinoActionSheetAction(
-            onPressed: () {
-              Navigator.pop(ctx);
-              _pickAndAddTorrent();
-            },
-            child: const Text('添加种子文件'),
-          ),
-        ],
-        cancelButton: CupertinoActionSheetAction(
-          onPressed: () => Navigator.pop(ctx),
-          child: const Text('取消'),
-        ),
-      ),
-    );
-  }
-
-  void _showAddMagnetDialog() {
-    final controller = TextEditingController();
-    showCupertinoDialog<void>(
-      context: context,
-      builder: (ctx) => CupertinoAlertDialog(
-        title: const Text('添加磁力链接'),
-        content: Padding(
-          padding: const EdgeInsets.only(top: 12),
-          child: CupertinoTextField(
-            controller: controller,
-            placeholder: 'magnet:?xt=... 或种子 URL',
-            minLines: 1,
-            maxLines: 4,
-            autofocus: true,
-          ),
-        ),
-        actions: [
-          CupertinoDialogAction(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('取消'),
-          ),
-          CupertinoDialogAction(
-            isDefaultAction: true,
-            onPressed: () {
-              final text = controller.text.trim();
-              Navigator.pop(ctx);
-              if (text.isEmpty) return;
-              _runAction(() => QBitApi().addMagnet(text), '磁力链接已添加');
-            },
-            child: const Text('添加'),
-          ),
-        ],
-      ),
-    ).then((_) => controller.dispose());
-  }
-
-  Future<void> _pickAndAddTorrent() async {
-    FilePickerResult? result;
-    try {
-      // iOS 上对自定义后缀支持不稳定，用 any 再自行校验，兼容性最好
-      result = await FilePicker.platform.pickFiles(withData: true);
-    } catch (e) {
-      debugPrint('选择文件失败: $e');
-    }
-    if (!mounted || result == null || result.files.isEmpty) return;
-
-    final file = result.files.first;
-    final bytes = file.bytes;
-    if (bytes == null) {
-      _toast('无法读取文件内容', ok: false);
-      return;
-    }
-    if (!file.name.toLowerCase().endsWith('.torrent')) {
-      _toast('请选择 .torrent 文件', ok: false);
-      return;
-    }
-    _runAction(() => QBitApi().addTorrentBytes(bytes, file.name), '种子文件已添加');
-  }
-
   // —— 长按种子的操作菜单 ——
 
   bool _isPaused(String state) =>
@@ -366,28 +237,40 @@ class _MainScreenState extends State<MainScreen> {
           child: const Text('删除'),
         ),
       ],
-      child: card,
+      // 关键：浮层中补一层透明 Material，提供完整 DefaultTextStyle，
+      // 否则长按放大时卡片文字会出现黄色下划线（缺省文本样式标志）。
+      child: Material(
+        type: MaterialType.transparency,
+        child: card,
+      ),
     );
   }
 
-  // 删除二次确认：可选择是否连同文件一起删
+  // 删除二次确认：居中弹窗，可选择是否连同文件一起删
   void _confirmDelete(String hash, String name) {
-    showCupertinoModalPopup<void>(
+    showCupertinoDialog<void>(
       context: context,
-      builder: (ctx) => CupertinoActionSheet(
+      builder: (ctx) => CupertinoAlertDialog(
         title: const Text('删除任务'),
-        message: Text(name, maxLines: 2, overflow: TextOverflow.ellipsis),
+        content: Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Text(name, maxLines: 3, overflow: TextOverflow.ellipsis),
+        ),
         actions: [
-          CupertinoActionSheetAction(
+          CupertinoDialogAction(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('取消'),
+          ),
+          CupertinoDialogAction(
             onPressed: () {
               Navigator.pop(ctx);
               _runAction(
                   () => QBitApi().deleteTorrent(hash, deleteFiles: false),
                   '已删除任务（保留文件）');
             },
-            child: const Text('仅删除任务（保留文件）'),
+            child: const Text('仅删任务'),
           ),
-          CupertinoActionSheetAction(
+          CupertinoDialogAction(
             isDestructiveAction: true,
             onPressed: () {
               Navigator.pop(ctx);
@@ -395,13 +278,9 @@ class _MainScreenState extends State<MainScreen> {
                   () => QBitApi().deleteTorrent(hash, deleteFiles: true),
                   '已删除任务和文件');
             },
-            child: const Text('删除任务和文件'),
+            child: const Text('删任务和文件'),
           ),
         ],
-        cancelButton: CupertinoActionSheetAction(
-          onPressed: () => Navigator.pop(ctx),
-          child: const Text('取消'),
-        ),
       ),
     );
   }
@@ -507,10 +386,24 @@ class _MainScreenState extends State<MainScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildTopBar(),
-              const SizedBox(height: 20),
-              const Text("种子", style: _pageTitleStyle),
-              const SizedBox(height: 20),
+              // 标题 + 添加
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text("种子", style: _pageTitleStyle),
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () async {
+                      await Get.to(() => const AddTorrentScreen());
+                      _fetchData(); // 返回后立即刷新
+                    },
+                    child: _buildCircleButton(CupertinoIcons.add, isOutlined: false),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              _buildFilterBar(),
+              const SizedBox(height: 16),
               _buildSpeedSummary(),
               const SizedBox(height: 20),
             ],
@@ -533,48 +426,56 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
-  Widget _buildTopBar() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        // 左上角：筛选
-        _buildFilterButton(),
-        // 右上角：添加磁力链 / 种子文件
-        GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: _showAddMenu,
-          child: _buildCircleButton(CupertinoIcons.add, isOutlined: false),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildFilterButton() {
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: _showFilterMenu,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: const Color(0xFF007AFF), width: 1.5),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(CupertinoIcons.line_horizontal_3_decrease,
-                color: Color(0xFF007AFF), size: 18),
-            const SizedBox(width: 6),
-            Text(
-              _filterLabel(_filter),
-              style: const TextStyle(
-                  color: Color(0xFF007AFF),
+  // 顶部横向胶囊筛选栏：点一下即切换，选中蓝底白字
+  Widget _buildFilterBar() {
+    const options = [
+      ['all', '全部'],
+      ['downloading', '下载中'],
+      ['seeding', '做种中'],
+      ['active', '活动中'],
+      ['paused', '已暂停'],
+      ['completed', '已完成'],
+    ];
+    return SizedBox(
+      height: 34,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        physics: const BouncingScrollPhysics(),
+        itemCount: options.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        itemBuilder: (_, i) {
+          final key = options[i][0];
+          final label = options[i][1];
+          final selected = _filter == key;
+          return GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => setState(() => _filter = key),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              curve: Curves.easeOut,
+              alignment: Alignment.center,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              decoration: BoxDecoration(
+                color: selected ? const Color(0xFF007AFF) : Colors.white,
+                borderRadius: BorderRadius.circular(17),
+                boxShadow: [
+                  BoxShadow(
+                      color: Colors.black.withOpacity(0.03),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2)),
+                ],
+              ),
+              child: Text(
+                label,
+                style: TextStyle(
                   fontSize: 14,
-                  fontWeight: FontWeight.w600),
+                  fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                  color: selected ? Colors.white : const Color(0xFF6E6E73),
+                ),
+              ),
             ),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
@@ -941,12 +842,20 @@ class _ServerSettingsPageState extends State<ServerSettingsPage> {
       _toast('当前使用中的服务器无法删除', ok: false);
       return;
     }
-    showCupertinoModalPopup<void>(
+    showCupertinoDialog<void>(
       context: context,
-      builder: (ctx) => CupertinoActionSheet(
-        title: Text('删除服务器「${_label(s)}」？'),
+      builder: (ctx) => CupertinoAlertDialog(
+        title: const Text('删除服务器'),
+        content: Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Text('确定删除「${_label(s)}」？'),
+        ),
         actions: [
-          CupertinoActionSheetAction(
+          CupertinoDialogAction(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('取消'),
+          ),
+          CupertinoDialogAction(
             isDestructiveAction: true,
             onPressed: () async {
               Navigator.pop(ctx);
@@ -957,10 +866,6 @@ class _ServerSettingsPageState extends State<ServerSettingsPage> {
             child: const Text('删除'),
           ),
         ],
-        cancelButton: CupertinoActionSheetAction(
-          onPressed: () => Navigator.pop(ctx),
-          child: const Text('取消'),
-        ),
       ),
     );
   }
