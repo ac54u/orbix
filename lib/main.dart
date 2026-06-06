@@ -1,7 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'screens/login_screen.dart';
+import 'screens/welcome_screen.dart';
 import 'controllers/torrent_controller.dart';
 import 'widgets/torrent_cell.dart';
 
@@ -21,7 +21,7 @@ class OrbixApp extends StatelessWidget {
         scaffoldBackgroundColor: const Color(0xFFF2F2F7),
         primaryColor: CupertinoColors.activeBlue,
       ),
-      home: const LoginScreen(), // 启动时默认进入登录/节点配置页
+      home: const WelcomeScreen(), // 启动进入欢迎/引导页
       debugShowCheckedModeBanner: false,
     );
   }
