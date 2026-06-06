@@ -178,11 +178,39 @@ class QBitApi {
 
   // 2. 获取主数据 (增量同步)
   Future<Map<String, dynamic>?> syncMainData(int rid) async {
+    final r = await _authedGet('/api/v2/sync/maindata', query: {'rid': rid});
+    final data = r?.data;
+    return data is Map ? Map<String, dynamic>.from(data) : null;
+  }
+
+  // 3. 种子列表
+  Future<List<dynamic>> getTorrents() async {
+    final r = await _authedGet('/api/v2/torrents/info');
+    final data = r?.data;
+    return data is List ? data : [];
+  }
+
+  // 4. 全局传输信息（含 dl_info_speed / up_info_speed）
+  Future<Map<String, dynamic>> getTransferInfo() async {
+    final r = await _authedGet('/api/v2/transfer/info');
+    final data = r?.data;
+    return data is Map ? Map<String, dynamic>.from(data) : {};
+  }
+
+  /// 带会话保活的 GET：遇到 401/403（会话过期）时自动重新登录并重试一次。
+  /// 让数据页无需关心登录态，断线/换会话后能自愈。
+  Future<Response?> _authedGet(String path, {Map<String, dynamic>? query}) async {
+    final opts = Options(validateStatus: (s) => s != null && s < 500);
     try {
-      final response = await _dio.get('/api/v2/sync/maindata', queryParameters: {'rid': rid});
-      return response.data;
-    } catch (e) {
-      print("同步数据失败: $e");
+      var r = await _dio.get(path, queryParameters: query, options: opts);
+      if (r.statusCode == 401 || r.statusCode == 403) {
+        final res = await connect(); // connect() 会清旧 cookie 并重新登录
+        if (!res.success) return null;
+        r = await _dio.get(path, queryParameters: query, options: opts);
+      }
+      return r.statusCode == 200 ? r : null;
+    } on DioException catch (e) {
+      print("请求失败 $path: $e");
       return null;
     }
   }

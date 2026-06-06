@@ -2,7 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../services/qbit_api.dart';
-import '../main.dart';
+import 'main_screen.dart';
 import 'welcome_screen.dart';
 import 'login_screen.dart';
 
