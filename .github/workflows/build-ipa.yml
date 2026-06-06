@@ -25,7 +25,12 @@ jobs:
 
       # 关键神级走位：声明为 simulator，完美绕过 Flutter 的证书前置审查，并生成所需的配置和 Pods
       - name: Prepare iOS Project & Pods
-        run: flutter build ios --simulator --config-only
+        run: |
+          flutter build ios --simulator --config-only
+          # 确保 Pods 被完整初始化
+          cd ios
+          pod install --repo-update || pod install
+          cd ..
 
       # 使用 Ruby 脚本强行剥离主工程和插件包的所有签名要求
       - name: Force Disable All Code Signing
@@ -36,6 +41,7 @@ jobs:
 
           def disable_signing(project_path)
             return unless File.exist?(project_path)
+            puts "Processing: #{project_path}"
             project = Xcodeproj::Project.open(project_path)
 
             project.build_configurations.each do |config|
@@ -43,6 +49,8 @@ jobs:
               config.build_settings['CODE_SIGNING_REQUIRED'] = 'NO'
               config.build_settings['CODE_SIGN_IDENTITY'] = ''
               config.build_settings['EXPANDED_CODE_SIGN_IDENTITY'] = ''
+              config.build_settings['CODE_SIGN_STYLE'] = 'Automatic'
+              config.build_settings['DEVELOPMENT_TEAM'] = ''
             end
 
             project.targets.each do |target|
@@ -51,13 +59,15 @@ jobs:
                 config.build_settings['CODE_SIGNING_REQUIRED'] = 'NO'
                 config.build_settings['CODE_SIGN_IDENTITY'] = ''
                 config.build_settings['EXPANDED_CODE_SIGN_IDENTITY'] = ''
+                config.build_settings['CODE_SIGN_STYLE'] = 'Automatic'
+                config.build_settings['DEVELOPMENT_TEAM'] = ''
               end
             end
             project.save
           end
 
           disable_signing('ios/Runner.xcodeproj')
-          disable_signing('ios/Pods/Pods.xcodeproj')
+          disable_signing('ios/Pods/Pods.xcodeproj') if File.exist?('ios/Pods/Pods.xcodeproj')
           INNER_EOF
           ruby disable_signing.rb
 
