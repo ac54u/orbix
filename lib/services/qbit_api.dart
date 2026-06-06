@@ -84,6 +84,9 @@ class QBitApi {
     if (currentServer == null) {
       return const ConnectResult(ConnectStatus.unknown, '尚未配置服务器信息');
     }
+    // 关键：先清空旧会话 cookie。否则带着上次的有效 QBT_SID 时，
+    // qBittorrent 会忽略本次密码直接返回成功，导致错误密码也“连接成功”。
+    await _cookieJar.deleteAll();
     try {
       final response = await _dio.post(
         '/api/v2/auth/login',
