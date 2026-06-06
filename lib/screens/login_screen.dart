@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/qbit_api.dart';
-import '../main.dart'; // 用于跳转到首页
+import '../main.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -13,329 +13,414 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  // —— 设计令牌（一处定义，全页复用，避免数值漂移）——
-  static const Color _ink = Color(0xFF1C1C1E);        // 主文字：近黑带暖调，不用纯黑
-  static const Color _inkMuted = Color(0xFF6E6E73);   // 次要文字：比 systemGrey 更深，过 4.5:1 对比
-  static const Color _accent = Color(0xFF007AFF);     // 唯一强调色，全页锁定
-  static const Color _fieldBg = Colors.white;
-  static const Color _hairline = Color(0xFFE5E5EA);   // 分隔线
-  static const double _radius = 14.0;                 // 统一圆角刻度
+  // 色彩与样式常量，匹配 iOS 设置页风格
+  static const Color _bgColor = Color(0xFFF2F2F7);
+  static const Color _cardColor = Colors.white;
+  static const Color _hairline = Color(0xFFE5E5EA);
+  static const Color _textColor = Color(0xFF1C1C1E); // 近黑带暖调，非纯黑
+  static const Color _placeholderColor = Color(0xFFB0B0B5);
+  static const Color _sectionTitleColor = Color(0xFF6E6E73); // 加深以过对比度
+  static const Color _accent = CupertinoColors.activeBlue;
+  static const Color _errorColor = CupertinoColors.destructiveRed;
+  static const Color _successColor = Color(0xFF34C759);
+  static const double _radius = 12.0;
 
-  final TextEditingController _urlController = TextEditingController();
+  // 表单控制器
+  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _hostController = TextEditingController();
+  final TextEditingController _portController = TextEditingController();
   final TextEditingController _usernameController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
 
-  // 聚焦态：用于给输入框绘制聚焦边框
-  final FocusNode _urlFocus = FocusNode();
-  final FocusNode _usernameFocus = FocusNode();
-  final FocusNode _passwordFocus = FocusNode();
-
-  bool _isLoading = false;
+  bool _useHttps = false;
   bool _obscurePassword = true;
-  String? _errorText; // 表单内联错误，替代纯弹窗
+  bool _isTesting = false;
+  ConnectResult? _testResult; // 测试结果（成功/失败 + 原因）
 
   @override
   void initState() {
     super.initState();
     _loadSavedCredentials();
-    // 聚焦变化时重绘边框
-    for (final node in [_urlFocus, _usernameFocus, _passwordFocus]) {
-      node.addListener(() => setState(() {}));
-    }
   }
 
   @override
   void dispose() {
-    _urlController.dispose();
+    _nameController.dispose();
+    _hostController.dispose();
+    _portController.dispose();
     _usernameController.dispose();
     _passwordController.dispose();
-    _urlFocus.dispose();
-    _usernameFocus.dispose();
-    _passwordFocus.dispose();
     super.dispose();
   }
 
-  // 尝试读取本地保存的账号密码
   void _loadSavedCredentials() async {
     final prefs = await SharedPreferences.getInstance();
+    // 兼容旧版本保存的完整 url：拆出 scheme/host/port
+    final legacyUrl = prefs.getString('qbit_url');
+    String? host = prefs.getString('qbit_host');
+    String? port = prefs.getString('qbit_port');
+    bool https = prefs.getBool('qbit_https') ?? false;
+    if (host == null && legacyUrl != null && legacyUrl.isNotEmpty) {
+      final parsed = Uri.tryParse(legacyUrl);
+      if (parsed != null) {
+        https = parsed.scheme == 'https';
+        host = parsed.host;
+        if (parsed.hasPort) port = parsed.port.toString();
+      }
+    }
     setState(() {
-      _urlController.text = prefs.getString('qbit_url') ?? 'http://';
+      _nameController.text = prefs.getString('qbit_name') ?? '';
+      _hostController.text = host ?? '';
+      _portController.text = port ?? '8080';
       _usernameController.text = prefs.getString('qbit_username') ?? 'admin';
       _passwordController.text = prefs.getString('qbit_password') ?? '';
+      _useHttps = https;
     });
   }
 
-  Future<void> _handleLogin() async {
-    FocusScope.of(context).unfocus();
-    final url = _urlController.text.trim();
-    final username = _usernameController.text.trim();
-    final password = _passwordController.text.trim();
+  // 由 HTTPS 开关 + 主机 + 端口拼出最终 URL（开关说了算，自动去掉用户误输的协议头）
+  String _buildUrl() {
+    String host = _hostController.text.trim();
+    host = host.replaceFirst(RegExp(r'^https?://'), ''); // 去协议
+    host = host.replaceAll(RegExp(r'/+$'), ''); // 去结尾斜杠
+    final scheme = _useHttps ? 'https' : 'http';
+    final port = _portController.text.trim();
+    return port.isNotEmpty ? '$scheme://$host:$port' : '$scheme://$host';
+  }
 
-    if (url.isEmpty || username.isEmpty) {
-      setState(() => _errorText = "服务器地址和用户名不能为空");
+  void _toast(String title, String msg, {bool error = false}) {
+    Get.snackbar(
+      title,
+      msg,
+      snackPosition: SnackPosition.BOTTOM,
+      margin: const EdgeInsets.all(16),
+      borderRadius: _radius,
+      backgroundColor: const Color(0xFF1C1C1E),
+      colorText: Colors.white,
+      icon: Icon(
+        error ? CupertinoIcons.exclamationmark_circle : CupertinoIcons.checkmark_circle,
+        color: error ? _errorColor : _successColor,
+      ),
+      duration: const Duration(seconds: 2),
+    );
+  }
+
+  Future<void> _handleSave() async {
+    FocusScope.of(context).unfocus();
+    final host = _hostController.text.trim();
+    final username = _usernameController.text.trim();
+
+    if (host.isEmpty || username.isEmpty) {
+      _toast('无法保存', '主机地址和用户名不能为空', error: true);
+      return;
+    }
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('qbit_name', _nameController.text.trim());
+    await prefs.setString('qbit_host', host);
+    await prefs.setString('qbit_port', _portController.text.trim());
+    await prefs.setString('qbit_username', username);
+    await prefs.setString('qbit_password', _passwordController.text.trim());
+    await prefs.setBool('qbit_https', _useHttps);
+    await prefs.remove('qbit_url'); // 清理旧版遗留键
+
+    final api = QBitApi();
+    api.setServer(ServerConfig(
+      url: _buildUrl(),
+      username: username,
+      password: _passwordController.text.trim(),
+    ));
+    Get.offAll(() => const MainScreen());
+  }
+
+  Future<void> _testConnection() async {
+    FocusScope.of(context).unfocus();
+    final host = _hostController.text.trim();
+    final username = _usernameController.text.trim();
+
+    if (host.isEmpty || username.isEmpty) {
+      setState(() => _testResult =
+          const ConnectResult(ConnectStatus.unknown, '请先填写主机地址和用户名'));
       return;
     }
 
     setState(() {
-      _isLoading = true;
-      _errorText = null;
+      _isTesting = true;
+      _testResult = null;
     });
 
-    // 1. 设置 API 实例
     final api = QBitApi();
-    api.setServer(ServerConfig(url: url, username: username, password: password));
+    api.setServer(ServerConfig(
+      url: _buildUrl(),
+      username: username,
+      password: _passwordController.text.trim(),
+    ));
 
-    // 2. 发起登录请求
-    bool success = await api.login();
+    final result = await api.connect();
 
     if (!mounted) return;
-    setState(() => _isLoading = false);
-
-    if (success) {
-      // 3. 登录成功，保存凭据到本地
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('qbit_url', url);
-      await prefs.setString('qbit_username', username);
-      await prefs.setString('qbit_password', password);
-
-      // 4. 跳转到首页，并销毁登录页防止返回
-      Get.offAll(() => const MainScreen());
-    } else {
-      setState(() => _errorText = "连接失败，请检查地址或账号密码是否正确");
-    }
+    setState(() {
+      _isTesting = false;
+      _testResult = result;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
+    final canPop = Navigator.of(context).canPop();
     return Scaffold(
-      backgroundColor: const Color(0xFFF2F2F7), // iOS 分组背景
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 440),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _buildBrand(),
-                  const SizedBox(height: 36),
-                  _buildForm(),
-                  // 内联错误：有内容时才占位，平滑展开
-                  AnimatedSize(
-                    duration: const Duration(milliseconds: 200),
-                    curve: Curves.easeOut,
-                    child: _errorText == null
-                        ? const SizedBox(width: double.infinity)
-                        : Padding(
-                            padding: const EdgeInsets.only(top: 14),
-                            child: Row(
-                              children: [
-                                const Icon(CupertinoIcons.exclamationmark_circle_fill,
-                                    color: CupertinoColors.systemRed, size: 16),
-                                const SizedBox(width: 6),
-                                Expanded(
-                                  child: Text(
-                                    _errorText!,
-                                    style: const TextStyle(
-                                        color: CupertinoColors.systemRed,
-                                        fontSize: 13,
-                                        height: 1.3),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                  ),
-                  const SizedBox(height: 28),
-                  _buildLoginButton(),
-                ],
-              ),
-            ),
+      backgroundColor: _bgColor,
+      appBar: AppBar(
+        backgroundColor: _bgColor,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        centerTitle: true,
+        title: const Text('添加服务器',
+            style: TextStyle(color: _textColor, fontSize: 17, fontWeight: FontWeight.w600)),
+        leading: canPop
+            ? CupertinoButton(
+                padding: EdgeInsets.zero,
+                onPressed: () => Get.back(),
+                child: const Text('取消', style: TextStyle(color: _accent, fontSize: 16)),
+              )
+            : null,
+        actions: [
+          CupertinoButton(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            onPressed: _handleSave,
+            child: const Text('保存',
+                style: TextStyle(color: _accent, fontSize: 16, fontWeight: FontWeight.w600)),
           ),
-        ),
+        ],
       ),
-    );
-  }
+      body: SafeArea(
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // 1. 服务器信息
+              _buildSectionHeader('服务器信息'),
+              _buildCardGroup([
+                _buildTextField(_nameController, '名称（可选）', icon: CupertinoIcons.tag, isLast: false),
+                _buildTextField(_hostController, '主机，例：192.168.1.2',
+                    icon: CupertinoIcons.link, keyboardType: TextInputType.url, isLast: false),
+                _buildTextField(_portController, '端口',
+                    icon: CupertinoIcons.number, keyboardType: TextInputType.number, isLast: true),
+              ]),
 
-  // —— 品牌区：单一 logo，做出层次与同色调投影，而非扁平蓝方块 ——
-  Widget _buildBrand() {
-    return Column(
-      children: [
-        Container(
-          width: 76,
-          height: 76,
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [Color(0xFF0A84FF), Color(0xFF0060DF)],
-            ),
-            borderRadius: BorderRadius.circular(_radius + 6),
-            boxShadow: [
-              // 投影染成强调色，而非纯黑，制造发光浮起感
-              BoxShadow(
-                color: _accent.withOpacity(0.30),
-                blurRadius: 20,
-                offset: const Offset(0, 8),
-              ),
+              // 2. 认证
+              _buildSectionHeader('认证'),
+              _buildCardGroup([
+                _buildTextField(_usernameController, '用户名',
+                    icon: CupertinoIcons.person, isLast: false),
+                _buildTextField(_passwordController, '密码',
+                    icon: CupertinoIcons.lock, obscure: _obscurePassword, isLast: true,
+                    suffix: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () => setState(() => _obscurePassword = !_obscurePassword),
+                      child: Padding(
+                        padding: const EdgeInsets.only(left: 8, right: 16),
+                        child: Icon(
+                          _obscurePassword
+                              ? CupertinoIcons.eye_slash_fill
+                              : CupertinoIcons.eye_fill,
+                          color: _sectionTitleColor,
+                          size: 18,
+                        ),
+                      ),
+                    )),
+              ]),
+
+              // 3. 使用 HTTPS
+              const SizedBox(height: 24),
+              _buildCardGroup([
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 4, 12, 4),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: const [
+                          Icon(CupertinoIcons.lock_shield, color: _sectionTitleColor, size: 20),
+                          SizedBox(width: 10),
+                          Text('使用 HTTPS', style: TextStyle(fontSize: 16, color: _textColor)),
+                        ],
+                      ),
+                      CupertinoSwitch(
+                        value: _useHttps,
+                        onChanged: (val) => setState(() {
+                          _useHttps = val;
+                          _testResult = null; // 改了协议，旧的测试结果作废
+                        }),
+                      ),
+                    ],
+                  ),
+                ),
+              ]),
+
+              // 4. 测试连接区
+              const SizedBox(height: 24),
+              _buildCardGroup([_buildTestRow(), ..._buildResultPanel()]),
+              const SizedBox(height: 40),
             ],
           ),
-          child: const Icon(CupertinoIcons.cloud_download_fill,
-              color: Colors.white, size: 38),
         ),
-        const SizedBox(height: 22),
-        const Text(
-          "连接到 Orbix",
-          style: TextStyle(
-            fontSize: 26,
-            fontWeight: FontWeight.w700,
-            color: _ink,
-            letterSpacing: -0.5, // 大字号收紧字距，更精致
-          ),
-        ),
-        const SizedBox(height: 6),
-        const Text(
-          "填写你的 qBittorrent 服务器信息",
-          style: TextStyle(color: _inkMuted, fontSize: 15, height: 1.3),
-        ),
-      ],
+      ),
     );
   }
 
-  // —— 表单卡片：iOS 分组样式，聚焦时高亮所在行 ——
-  Widget _buildForm() {
+  // —— 辅助组件构建方法 ——
+
+  Widget _buildSectionHeader(String title) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 16, bottom: 6, top: 24),
+      child: Text(title, style: const TextStyle(color: _sectionTitleColor, fontSize: 13)),
+    );
+  }
+
+  Widget _buildCardGroup(List<Widget> children) {
     return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16),
       decoration: BoxDecoration(
-        color: _fieldBg,
+        color: _cardColor,
         borderRadius: BorderRadius.circular(_radius),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
       ),
-      child: Column(
-        children: [
-          _buildField(
-            controller: _urlController,
-            focusNode: _urlFocus,
-            icon: CupertinoIcons.link,
-            placeholder: "服务器地址，例：http://192.168.1.2:8080",
-            keyboardType: TextInputType.url,
-            showDivider: true,
-          ),
-          _buildField(
-            controller: _usernameController,
-            focusNode: _usernameFocus,
-            icon: CupertinoIcons.person_fill,
-            placeholder: "用户名",
-            showDivider: true,
-          ),
-          _buildField(
-            controller: _passwordController,
-            focusNode: _passwordFocus,
-            icon: CupertinoIcons.lock_fill,
-            placeholder: "密码",
-            obscure: _obscurePassword,
-            showDivider: false,
-            suffix: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () => setState(() => _obscurePassword = !_obscurePassword),
-              child: Padding(
-                padding: const EdgeInsets.only(right: 14, left: 8),
-                child: Icon(
-                  _obscurePassword
-                      ? CupertinoIcons.eye_slash_fill
-                      : CupertinoIcons.eye_fill,
-                  color: _inkMuted,
-                  size: 18,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: children),
     );
   }
 
-  Widget _buildField({
-    required TextEditingController controller,
-    required FocusNode focusNode,
+  Widget _buildTextField(
+    TextEditingController controller,
+    String placeholder, {
     required IconData icon,
-    required String placeholder,
-    required bool showDivider,
     bool obscure = false,
+    bool isLast = false,
     TextInputType? keyboardType,
     Widget? suffix,
   }) {
-    final bool focused = focusNode.hasFocus;
     return Container(
       decoration: BoxDecoration(
-        border: Border(
-          bottom: showDivider
-              ? const BorderSide(color: _hairline, width: 0.5)
-              : BorderSide.none,
-        ),
+        // 修复点：border 需要 Border，而非 BorderSide
+        border: isLast
+            ? null
+            : const Border(bottom: BorderSide(color: _hairline, width: 0.5)),
       ),
       child: CupertinoTextField(
         controller: controller,
-        focusNode: focusNode,
         obscureText: obscure,
         keyboardType: keyboardType,
-        padding: const EdgeInsets.symmetric(vertical: 16),
+        padding: const EdgeInsets.symmetric(vertical: 14),
         placeholder: placeholder,
-        placeholderStyle: const TextStyle(color: _inkMuted, fontSize: 15),
-        style: const TextStyle(color: _ink, fontSize: 16),
+        placeholderStyle: const TextStyle(color: _placeholderColor, fontSize: 16),
+        style: const TextStyle(color: _textColor, fontSize: 16),
         cursorColor: _accent,
-        decoration: const BoxDecoration(color: Colors.transparent),
         prefix: Padding(
           padding: const EdgeInsets.only(left: 16, right: 12),
-          // 图标随聚焦变色，给出清晰的当前行反馈
-          child: Icon(icon, color: focused ? _accent : _inkMuted, size: 20),
+          child: Icon(icon, color: _sectionTitleColor, size: 20),
         ),
         suffix: suffix,
+        decoration: const BoxDecoration(color: Colors.transparent),
       ),
     );
   }
 
-  // —— 主按钮：填充式，按下有物理回弹，加载/禁用态清晰 ——
-  Widget _buildLoginButton() {
+  Widget _buildTestRow() {
+    final bool ok = _testResult?.success ?? false;
+    final bool failed = _testResult != null && !_testResult!.success;
     return CupertinoButton(
-      padding: EdgeInsets.zero,
-      onPressed: _isLoading ? null : _handleLogin,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        height: 52,
-        decoration: BoxDecoration(
-          color: _isLoading ? _accent.withOpacity(0.6) : _accent,
-          borderRadius: BorderRadius.circular(_radius),
-          boxShadow: _isLoading
-              ? null
-              : [
-                  BoxShadow(
-                    color: _accent.withOpacity(0.28),
-                    blurRadius: 16,
-                    offset: const Offset(0, 6),
-                  ),
-                ],
-        ),
-        alignment: Alignment.center,
-        child: _isLoading
-            ? const CupertinoActivityIndicator(color: Colors.white)
-            : const Text(
-                "连接服务器",
-                style: TextStyle(
-                  fontSize: 17,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white,
-                  letterSpacing: 0.2,
-                ),
-              ),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      onPressed: _isTesting ? null : _testConnection,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            _isTesting ? '测试中…' : '测试连接',
+            style: const TextStyle(fontSize: 16, color: _accent),
+          ),
+          if (_isTesting)
+            const CupertinoActivityIndicator()
+          else if (ok)
+            const Icon(CupertinoIcons.checkmark_circle_fill, color: _successColor, size: 22)
+          else if (failed)
+            const Icon(CupertinoIcons.xmark_circle_fill, color: _errorColor, size: 22),
+        ],
       ),
     );
+  }
+
+  // 测试结果面板：成功为绿、失败为红，并按错误类型给出针对性提示
+  List<Widget> _buildResultPanel() {
+    final r = _testResult;
+    if (r == null || _isTesting) return [];
+
+    if (r.success) {
+      return [
+        const Divider(height: 1, thickness: 0.5, color: _hairline),
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: const [
+              Icon(CupertinoIcons.checkmark_seal_fill, color: _successColor, size: 18),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text('连接成功，凭据有效，可以保存了',
+                    style: TextStyle(color: _successColor, fontSize: 14, fontWeight: FontWeight.w500)),
+              ),
+            ],
+          ),
+        ),
+      ];
+    }
+
+    // 失败：标题与排查清单随错误类型变化
+    String title;
+    List<String> hints;
+    switch (r.status) {
+      case ConnectStatus.authFailed:
+        title = '认证失败';
+        hints = ['用户名是否正确', '密码是否正确'];
+        break;
+      case ConnectStatus.network:
+        title = '网络连接失败';
+        hints = ['服务器是否在线', '主机地址和端口是否正确', 'HTTPS 开关是否与服务器一致'];
+        break;
+      default:
+        title = '连接失败';
+        hints = ['请检查服务器配置'];
+    }
+
+    return [
+      const Divider(height: 1, thickness: 0.5, color: _hairline),
+      Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(CupertinoIcons.exclamationmark_triangle_fill,
+                    color: _errorColor, size: 16),
+                const SizedBox(width: 6),
+                Text(title,
+                    style: const TextStyle(
+                        color: _errorColor, fontSize: 14, fontWeight: FontWeight.w600)),
+              ],
+            ),
+            const SizedBox(height: 10),
+            // 排查清单用次要色，避免整块刺眼的红
+            ...hints.map((h) => Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Text('• $h',
+                      style: const TextStyle(color: _sectionTitleColor, fontSize: 13, height: 1.4)),
+                )),
+            const SizedBox(height: 8),
+            Text('详细信息：${r.message}',
+                style: const TextStyle(color: _placeholderColor, fontSize: 12, height: 1.4)),
+          ],
+        ),
+      ),
+    ];
   }
 }
