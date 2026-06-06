@@ -87,38 +87,44 @@ class _MainScreenState extends State<MainScreen> {
     return "${s}s";
   }
 
-  // 将 qBittorrent 状态码转为 UI 文本与颜色（兼容新版 stopped* / 旧版 paused*）
+  // 将 qBittorrent 状态码转为 UI 文本/颜色/图标（兼容新版 stopped* / 旧版 paused*）
   Map<String, dynamic> _parseState(String state) {
+    const blue = Color(0xFF007AFF);
+    const green = Color(0xFF34C759);
+    const grey = Color(0xFF8E8E93);
+    const orange = Color(0xFFFF9500);
+    const red = Color(0xFFFF3B30);
     switch (state) {
       case 'downloading':
       case 'metaDL':
       case 'forcedDL':
-        return {"text": "下载中", "color": const Color(0xFF007AFF), "isDl": true};
+        return {"text": "下载中", "color": blue, "icon": CupertinoIcons.arrow_down_circle_fill};
       case 'stalledDL':
-        return {"text": "等待下载", "color": const Color(0xFF007AFF), "isDl": true};
+        return {"text": "等待下载", "color": blue, "icon": CupertinoIcons.arrow_down_circle};
       case 'uploading':
       case 'forcedUP':
-        return {"text": "上传中", "color": const Color(0xFF34C759), "isDl": false};
+        return {"text": "上传中", "color": green, "icon": CupertinoIcons.arrow_up_circle_fill};
       case 'stalledUP':
-        return {"text": "做种中", "color": const Color(0xFF34C759), "isDl": false};
+        return {"text": "做种中", "color": green, "icon": CupertinoIcons.arrow_up_circle_fill};
       case 'pausedDL':
       case 'stoppedDL':
-        return {"text": "已暂停", "color": const Color(0xFF8E8E93), "isDl": true};
+        // 暂停：用暂停图标，而非向下箭头
+        return {"text": "已暂停", "color": grey, "icon": CupertinoIcons.pause_circle_fill};
       case 'pausedUP':
       case 'stoppedUP':
-        return {"text": "已完成", "color": const Color(0xFF8E8E93), "isDl": false};
+        return {"text": "已完成", "color": grey, "icon": CupertinoIcons.checkmark_circle_fill};
       case 'checkingUP':
       case 'checkingDL':
       case 'checkingResumeData':
-        return {"text": "校验中", "color": const Color(0xFFFF9500), "isDl": true};
+        return {"text": "校验中", "color": orange, "icon": CupertinoIcons.arrow_2_circlepath_circle_fill};
       case 'queuedDL':
       case 'queuedUP':
-        return {"text": "排队中", "color": const Color(0xFF8E8E93), "isDl": false};
+        return {"text": "排队中", "color": grey, "icon": CupertinoIcons.time};
       case 'error':
       case 'missingFiles':
-        return {"text": "错误", "color": const Color(0xFFFF3B30), "isDl": false};
+        return {"text": "错误", "color": red, "icon": CupertinoIcons.exclamationmark_circle_fill};
       default:
-        return {"text": state, "color": const Color(0xFF8E8E93), "isDl": false};
+        return {"text": state, "color": grey, "icon": CupertinoIcons.circle};
     }
   }
 
@@ -297,69 +303,70 @@ class _MainScreenState extends State<MainScreen> {
   bool _isPaused(String state) =>
       state.startsWith('stopped') || state.startsWith('paused');
 
-  void _showTorrentActions(String hash, String name, String state) {
+  /// 用 CupertinoContextMenu 包裹种子卡片：长按后卡片浮起放大、背景模糊，
+  /// 操作项从卡片处展开（iOS 原生「3D Touch / Haptic Touch」效果）。
+  Widget _wrapWithContextMenu({
+    required String hash,
+    required String name,
+    required String state,
+    required Widget card,
+  }) {
     final paused = _isPaused(state);
-    showCupertinoModalPopup<void>(
-      context: context,
-      builder: (ctx) => CupertinoActionSheet(
-        title: Text(
-          name,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(fontSize: 13),
+    return CupertinoContextMenu(
+      actions: [
+        if (paused)
+          CupertinoContextMenuAction(
+            trailingIcon: CupertinoIcons.play_fill,
+            onPressed: () {
+              Navigator.pop(context);
+              _runAction(() => QBitApi().startTorrent(hash), '已启动');
+            },
+            child: const Text('启动'),
+          )
+        else
+          CupertinoContextMenuAction(
+            trailingIcon: CupertinoIcons.pause_fill,
+            onPressed: () {
+              Navigator.pop(context);
+              _runAction(() => QBitApi().stopTorrent(hash), '已暂停');
+            },
+            child: const Text('暂停'),
+          ),
+        CupertinoContextMenuAction(
+          trailingIcon: CupertinoIcons.bolt_fill,
+          onPressed: () {
+            Navigator.pop(context);
+            _runAction(() => QBitApi().forceStartTorrent(hash), '已强制启动');
+          },
+          child: const Text('强制启动'),
         ),
-        actions: [
-          if (paused)
-            CupertinoActionSheetAction(
-              onPressed: () {
-                Navigator.pop(ctx);
-                _runAction(() => QBitApi().startTorrent(hash), '已启动');
-              },
-              child: const Text('启动'),
-            )
-          else
-            CupertinoActionSheetAction(
-              onPressed: () {
-                Navigator.pop(ctx);
-                _runAction(() => QBitApi().stopTorrent(hash), '已暂停');
-              },
-              child: const Text('暂停'),
-            ),
-          CupertinoActionSheetAction(
-            onPressed: () {
-              Navigator.pop(ctx);
-              _runAction(() => QBitApi().forceStartTorrent(hash), '已强制启动');
-            },
-            child: const Text('强制启动'),
-          ),
-          CupertinoActionSheetAction(
-            onPressed: () {
-              Navigator.pop(ctx);
-              _runAction(() => QBitApi().recheckTorrent(hash), '已开始重新校验');
-            },
-            child: const Text('强制重新校验'),
-          ),
-          CupertinoActionSheetAction(
-            onPressed: () {
-              Navigator.pop(ctx);
-              _runAction(() => QBitApi().reannounceTorrent(hash), '已重新汇报');
-            },
-            child: const Text('强制重新汇报'),
-          ),
-          CupertinoActionSheetAction(
-            isDestructiveAction: true,
-            onPressed: () {
-              Navigator.pop(ctx);
-              _confirmDelete(hash, name);
-            },
-            child: const Text('删除'),
-          ),
-        ],
-        cancelButton: CupertinoActionSheetAction(
-          onPressed: () => Navigator.pop(ctx),
-          child: const Text('取消'),
+        CupertinoContextMenuAction(
+          trailingIcon: CupertinoIcons.checkmark_shield,
+          onPressed: () {
+            Navigator.pop(context);
+            _runAction(() => QBitApi().recheckTorrent(hash), '已开始重新校验');
+          },
+          child: const Text('强制重新校验'),
         ),
-      ),
+        CupertinoContextMenuAction(
+          trailingIcon: CupertinoIcons.antenna_radiowaves_left_right,
+          onPressed: () {
+            Navigator.pop(context);
+            _runAction(() => QBitApi().reannounceTorrent(hash), '已重新汇报');
+          },
+          child: const Text('强制重新汇报'),
+        ),
+        CupertinoContextMenuAction(
+          isDestructiveAction: true,
+          trailingIcon: CupertinoIcons.delete,
+          onPressed: () {
+            Navigator.pop(context);
+            _confirmDelete(hash, name);
+          },
+          child: const Text('删除'),
+        ),
+      ],
+      child: card,
     );
   }
 
@@ -432,8 +439,8 @@ class _MainScreenState extends State<MainScreen> {
                 index: _currentIndex,
                 children: [
                   _buildTorrentPage(),
-                  _buildPlaceholder("统计"),
-                  _buildPlaceholder("搜索"),
+                  _buildSimplePage("统计", CupertinoIcons.chart_bar_alt_fill),
+                  _buildSimplePage("搜索", CupertinoIcons.search),
                   ServerSettingsPage(
                     // 切换服务器后回到「种子」页并立即刷新，给出直观反馈
                     onSwitched: () {
@@ -452,43 +459,77 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
-  Widget _buildPlaceholder(String name) {
-    return Center(
-      child: Text("$name · 开发中",
-          style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 16)),
+  // 各页统一的大标题样式
+  static const TextStyle _pageTitleStyle = TextStyle(
+    fontSize: 34,
+    fontWeight: FontWeight.w800,
+    color: Color(0xFF1C1C1E),
+    letterSpacing: -0.5,
+  );
+
+  // 占位页（统计/搜索）：同样固定标题，内容居中
+  Widget _buildSimplePage(String title, IconData icon) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: Text(title, style: _pageTitleStyle),
+          ),
+        ),
+        Expanded(
+          child: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, size: 48, color: const Color(0xFFC7C7CC)),
+                const SizedBox(height: 12),
+                Text("$title · 开发中",
+                    style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 16)),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 
-  // 种子主页面
+  // 种子主页面：顶部（筛选/添加 + 标题 + 速度总览）固定，仅列表滚动
   Widget _buildTorrentPage() {
-    return RefreshIndicator(
-      onRefresh: _fetchData,
-      child: SingleChildScrollView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.symmetric(horizontal: 20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SizedBox(height: 10),
-            _buildTopBar(),
-            const SizedBox(height: 24),
-            const Text(
-              "种子",
-              style: TextStyle(
-                fontSize: 34,
-                fontWeight: FontWeight.w800,
-                color: Color(0xFF1C1C1E),
-                letterSpacing: -0.5,
-              ),
-            ),
-            const SizedBox(height: 20),
-            _buildSpeedSummary(),
-            const SizedBox(height: 24),
-            _buildDynamicTorrentList(),
-            const SizedBox(height: 20),
-          ],
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // —— 固定头部 ——
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildTopBar(),
+              const SizedBox(height: 20),
+              const Text("种子", style: _pageTitleStyle),
+              const SizedBox(height: 20),
+              _buildSpeedSummary(),
+              const SizedBox(height: 20),
+            ],
+          ),
         ),
-      ),
+        // —— 可滚动列表 ——
+        Expanded(
+          child: RefreshIndicator(
+            onRefresh: _fetchData,
+            child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+              children: [
+                _buildDynamicTorrentList(),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -634,7 +675,10 @@ class _MainScreenState extends State<MainScreen> {
 
   // —— 动态渲染服务器返回的种子列表 ——
   Widget _buildDynamicTorrentList() {
-    final list = _torrents.where(_matchesFilter).toList();
+    // 按添加时间倒序：最新添加的排在最前
+    final list = _torrents.where(_matchesFilter).toList()
+      ..sort((a, b) => ((b['added_on'] ?? 0) as int)
+          .compareTo((a['added_on'] ?? 0) as int));
 
     if (list.isEmpty) {
       final String emptyText;
@@ -669,27 +713,26 @@ class _MainScreenState extends State<MainScreen> {
         final ratio = (t['ratio'] ?? 0.0).toDouble();
         final eta = (t['eta'] ?? 8640000) as int;
 
+        final card = _buildTorrentCard(
+          title: name,
+          size: _formatSize(totalSize),
+          progress: progress,
+          progressText: "${(progress * 100).toStringAsFixed(1)}%",
+          statusText: stateInfo["text"],
+          themeColor: stateInfo["color"],
+          statusIcon: stateInfo["icon"],
+          downSpeed: _formatSpeed(dlspeed),
+          upSpeed: _formatSpeed(upspeed),
+          ratio: ratio.toStringAsFixed(2),
+          eta: _formatEta(eta),
+        );
+
         return Padding(
           padding: const EdgeInsets.only(bottom: 16.0),
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onLongPress: hash.isEmpty
-                ? null
-                : () => _showTorrentActions(hash, name, rawState),
-            child: _buildTorrentCard(
-              title: name,
-              size: _formatSize(totalSize),
-              progress: progress,
-              progressText: "${(progress * 100).toStringAsFixed(1)}%",
-              statusText: stateInfo["text"],
-              themeColor: stateInfo["color"],
-              isDownloading: stateInfo["isDl"],
-              downSpeed: _formatSpeed(dlspeed),
-              upSpeed: _formatSpeed(upspeed),
-              ratio: ratio.toStringAsFixed(2),
-              eta: _formatEta(eta),
-            ),
-          ),
+          child: hash.isEmpty
+              ? card
+              : _wrapWithContextMenu(
+                  hash: hash, name: name, state: rawState, card: card),
         );
       }).toList(),
     );
@@ -702,7 +745,7 @@ class _MainScreenState extends State<MainScreen> {
     required String progressText,
     required String statusText,
     required Color themeColor,
-    required bool isDownloading,
+    required IconData statusIcon,
     required String downSpeed,
     required String upSpeed,
     required String ratio,
@@ -724,7 +767,7 @@ class _MainScreenState extends State<MainScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Icon(
-                isDownloading ? CupertinoIcons.arrow_down_circle_fill : CupertinoIcons.arrow_up_circle_fill,
+                statusIcon,
                 color: themeColor,
                 size: 28,
               ),
@@ -947,32 +990,45 @@ class _ServerSettingsPageState extends State<ServerSettingsPage> {
   Widget build(BuildContext context) {
     return SafeArea(
       bottom: false,
-      child: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 10, 20, 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const SizedBox(height: 6),
-          const Text(
-            '设置',
-            style: TextStyle(
-              fontSize: 34,
-              fontWeight: FontWeight.w800,
-              color: _ink,
-              letterSpacing: -0.5,
+          // —— 固定标题 ——
+          const Padding(
+            padding: EdgeInsets.fromLTRB(20, 10, 20, 0),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                '设置',
+                style: TextStyle(
+                  fontSize: 34,
+                  fontWeight: FontWeight.w800,
+                  color: _ink,
+                  letterSpacing: -0.5,
+                ),
+              ),
             ),
           ),
-          const SizedBox(height: 24),
-          const Padding(
-            padding: EdgeInsets.only(left: 4, bottom: 8),
-            child: Text('服务器',
-                style: TextStyle(fontSize: 13, color: _inkMuted)),
+          // —— 可滚动内容 ——
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+              children: [
+                const Padding(
+                  padding: EdgeInsets.only(left: 4, bottom: 8),
+                  child: Text('服务器',
+                      style: TextStyle(fontSize: 13, color: _inkMuted)),
+                ),
+                if (_loading)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 40),
+                    child: Center(child: CupertinoActivityIndicator()),
+                  )
+                else
+                  _buildServerCard(),
+              ],
+            ),
           ),
-          if (_loading)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 40),
-              child: Center(child: CupertinoActivityIndicator()),
-            )
-          else
-            _buildServerCard(),
         ],
       ),
     );
