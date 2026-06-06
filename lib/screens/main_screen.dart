@@ -403,9 +403,9 @@ class _MainScreenState extends State<MainScreen> {
               ),
               const SizedBox(height: 16),
               _buildFilterBar(),
-              const SizedBox(height: 16),
+              // 速度卡：有速度才出现（自带顶部间距），空闲时整体收起
               _buildSpeedSummary(),
-              const SizedBox(height: 20),
+              const SizedBox(height: 16),
             ],
           ),
         ),
@@ -493,30 +493,52 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
-  // 全局速度总览
+  // 全局速度总览：有速度才显示对应卡片，空闲时整体平滑收起
   Widget _buildSpeedSummary() {
-    return Row(
-      children: [
-        Expanded(
-          child: _buildSpeedCard(
-            title: "上传",
-            speedStr: _formatSpeed(_totalUpSpeed),
-            icon: CupertinoIcons.arrow_up_circle_fill,
-            color: const Color(0xFF007AFF),
-            gradientColors: [const Color(0xFF007AFF), const Color(0xFF007AFF).withOpacity(0.1)],
-          ),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: _buildSpeedCard(
-            title: "下载",
-            speedStr: _formatSpeed(_totalDlSpeed),
-            icon: CupertinoIcons.arrow_down_circle_fill,
-            color: const Color(0xFF5AC8FA),
-            gradientColors: [const Color(0xFF5AC8FA), const Color(0xFF5AC8FA).withOpacity(0.1)],
-          ),
-        ),
-      ],
+    final showUp = _totalUpSpeed > 0;
+    final showDl = _totalDlSpeed > 0;
+    final show = showUp || showDl;
+
+    return AnimatedSize(
+      duration: const Duration(milliseconds: 260),
+      curve: Curves.easeOut,
+      alignment: Alignment.topCenter,
+      child: !show
+          ? const SizedBox(width: double.infinity) // 收起到 0 高度
+          : Padding(
+              padding: const EdgeInsets.only(top: 16),
+              child: Row(
+                children: [
+                  if (showUp)
+                    Expanded(
+                      child: _buildSpeedCard(
+                        title: "上传",
+                        speedStr: _formatSpeed(_totalUpSpeed),
+                        icon: CupertinoIcons.arrow_up_circle_fill,
+                        color: const Color(0xFF007AFF),
+                        gradientColors: [
+                          const Color(0xFF007AFF),
+                          const Color(0xFF007AFF).withOpacity(0.1)
+                        ],
+                      ),
+                    ),
+                  if (showUp && showDl) const SizedBox(width: 16),
+                  if (showDl)
+                    Expanded(
+                      child: _buildSpeedCard(
+                        title: "下载",
+                        speedStr: _formatSpeed(_totalDlSpeed),
+                        icon: CupertinoIcons.arrow_down_circle_fill,
+                        color: const Color(0xFF5AC8FA),
+                        gradientColors: [
+                          const Color(0xFF5AC8FA),
+                          const Color(0xFF5AC8FA).withOpacity(0.1)
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ),
     );
   }
 

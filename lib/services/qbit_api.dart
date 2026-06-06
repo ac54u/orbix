@@ -400,10 +400,19 @@ class QBitApi {
   /// POST /api/v2/torrents/add，401/403 自动重登重试。
   /// FormData 是一次性的（流读完即失效），重试时用 build() 重新构造。
   Future<bool> _postAdd(FormData Function() build) async {
-    final opts = Options(validateStatus: (s) => s != null && s < 500);
-    bool isOk(Response r) =>
-        r.statusCode == 200 &&
-        !r.data.toString().toLowerCase().contains('fail');
+    // 放宽超时：上传 .torrent + qB 处理 + 远程往返常超过全局 3 秒，
+    // 否则会“服务器已添加成功、客户端却超时报失败”。
+    final opts = Options(
+      validateStatus: (s) => s != null && s < 500,
+      sendTimeout: const Duration(seconds: 30),
+      receiveTimeout: const Duration(seconds: 30),
+    );
+    // 成功判定放宽到所有 2xx（不同版本可能返回 200 "Ok." 或 204 空响应）
+    bool isOk(Response r) {
+      final code = r.statusCode ?? 0;
+      if (code < 200 || code >= 300) return false;
+      return !r.data.toString().toLowerCase().contains('fail');
+    }
     try {
       var r = await _dio.post('/api/v2/torrents/add',
           data: build(), options: opts);
