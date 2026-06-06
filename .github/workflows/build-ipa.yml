@@ -27,17 +27,12 @@ jobs:
       - name: Prepare iOS Project
         run: flutter build ios --simulator --config-only
 
-      # 直接修改 project.pbxproj 移除签名相关设置
       - name: Force Disable All Code Signing
         run: |
-          # 移除 DEVELOPMENT_TEAM 设置
-          sed -i '/DEVELOPMENT_TEAM = /d' ios/Runner.xcodeproj/project.pbxproj
-          sed -i '/CODE_SIGN_IDENTITY = /d' ios/Runner.xcodeproj/project.pbxproj
-          sed -i '/CODE_SIGNING_ALLOWED = /d' ios/Runner.xcodeproj/project.pbxproj
-          sed -i '/CODE_SIGNING_REQUIRED = /d' ios/Runner.xcodeproj/project.pbxproj
-
-          # 检查是否成功
-          echo "✓ Code signing requirements removed from project.pbxproj"
+          perl -i -pe 's/DEVELOPMENT_TEAM = .*;/DEVELOPMENT_TEAM = "";/' ios/Runner.xcodeproj/project.pbxproj
+          perl -i -pe 's/CODE_SIGN_IDENTITY = .*;/CODE_SIGN_IDENTITY = "";/' ios/Runner.xcodeproj/project.pbxproj
+          perl -i -pe 's/CODE_SIGNING_ALLOWED = .*;/CODE_SIGNING_ALLOWED = NO;/' ios/Runner.xcodeproj/project.pbxproj
+          perl -i -pe 's/CODE_SIGNING_REQUIRED = .*;/CODE_SIGNING_REQUIRED = NO;/' ios/Runner.xcodeproj/project.pbxproj
 
       # 此时 Xcode 工程已变“瞎子”，放行无签编译
       - name: Build iOS (Unsigned)
