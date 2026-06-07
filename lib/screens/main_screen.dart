@@ -894,10 +894,49 @@ class _ServerSettingsPageState extends State<ServerSettingsPage> {
   }
 
   Future<void> _addServer() async {
-    // 进入登录页添加；保存后它会 upsert 并 Get.offAll 到新的 MainScreen
+    // 进入登录页添加（输入框为空）；保存后它会 upsert 并 Get.offAll 到新的 MainScreen
     await Get.to(() => const LoginScreen());
     // 返回后（取消的情况）刷新一次列表
     await _load();
+  }
+
+  // 长按服务器：编辑 / 删除
+  void _showServerActions(ServerConfig s) {
+    showCupertinoModalPopup<void>(
+      context: context,
+      builder: (ctx) => CupertinoActionSheet(
+        title: Text(_label(s)),
+        message: Text('${s.url}  ·  ${s.username}'),
+        actions: [
+          CupertinoActionSheetAction(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _editServer(s);
+            },
+            child: const Text('编辑'),
+          ),
+          CupertinoActionSheetAction(
+            isDestructiveAction: true,
+            onPressed: () {
+              Navigator.pop(ctx);
+              _confirmDelete(s);
+            },
+            child: const Text('删除'),
+          ),
+        ],
+        cancelButton: CupertinoActionSheetAction(
+          onPressed: () => Navigator.pop(ctx),
+          child: const Text('取消'),
+        ),
+      ),
+    );
+  }
+
+  // 进入登录页编辑该服务器；返回后刷新列表
+  Future<void> _editServer(ServerConfig s) async {
+    final changed = await Get.to(() => LoginScreen(editServer: s));
+    await _load();
+    if (changed == true && mounted) _toast('已更新 ${_label(s)}', ok: true);
   }
 
   String _label(ServerConfig s) =>
@@ -995,7 +1034,7 @@ class _ServerSettingsPageState extends State<ServerSettingsPage> {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: () => _switchTo(s),
-      onLongPress: () => _confirmDelete(s),
+      onLongPress: () => _showServerActions(s),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         child: Row(

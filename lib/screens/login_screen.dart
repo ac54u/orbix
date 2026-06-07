@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -7,7 +8,11 @@ import 'main_screen.dart';
 import '../theme/app_colors.dart';
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+  /// 非空 = 编辑现有服务器（回填该服务器信息）；为空 = 全新添加（清空输入框）。
+  final ServerConfig? editServer;
+  const LoginScreen({super.key, this.editServer});
+
+  bool get isEditing => editServer != null;
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -43,7 +48,7 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   void initState() {
     super.initState();
-    _loadSavedCredentials();
+    _initFields();
   }
 
   @override
@@ -56,29 +61,30 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  void _loadSavedCredentials() async {
-    final prefs = await SharedPreferences.getInstance();
-    // 兼容旧版本保存的完整 url：拆出 scheme/host/port
-    final legacyUrl = prefs.getString('qbit_url');
-    String? host = prefs.getString('qbit_host');
-    String? port = prefs.getString('qbit_port');
-    bool https = prefs.getBool('qbit_https') ?? false;
-    if (host == null && legacyUrl != null && legacyUrl.isNotEmpty) {
-      final parsed = Uri.tryParse(legacyUrl);
-      if (parsed != null) {
-        https = parsed.scheme == 'https';
-        host = parsed.host;
-        if (parsed.hasPort) port = parsed.port.toString();
-      }
+  // 初始化表单：编辑模式回填该服务器；新增模式留空（仅给出合理默认端口/用户名）。
+  void _initFields() {
+    final s = widget.editServer;
+    if (s != null) {
+      final u = Uri.tryParse(s.url);
+      final host = s.host.isNotEmpty ? s.host : (u?.host ?? '');
+      final port = s.port.isNotEmpty
+          ? s.port
+          : (u != null && u.hasPort ? u.port.toString() : '8080');
+      _nameController.text = s.name;
+      _hostController.text = host;
+      _portController.text = port;
+      _usernameController.text = s.username;
+      _passwordController.text = s.password;
+      _useHttps = s.https || (u?.scheme == 'https');
+    } else {
+      // 全新添加：清空，避免带入上一个服务器的信息
+      _nameController.text = '';
+      _hostController.text = '';
+      _portController.text = '8080';
+      _usernameController.text = 'admin';
+      _passwordController.text = '';
+      _useHttps = false;
     }
-    setState(() {
-      _nameController.text = prefs.getString('qbit_name') ?? '';
-      _hostController.text = host ?? '';
-      _portController.text = port ?? '8080';
-      _usernameController.text = prefs.getString('qbit_username') ?? 'admin';
-      _passwordController.text = prefs.getString('qbit_password') ?? '';
-      _useHttps = https;
-    });
   }
 
   // 由 HTTPS 开关 + 主机 + 端口拼出最终 URL（智能容错见 QBitApi.buildUrl）
@@ -112,15 +118,6 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
 
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('qbit_name', _nameController.text.trim());
-    await prefs.setString('qbit_host', host);
-    await prefs.setString('qbit_port', _portController.text.trim());
-    await prefs.setString('qbit_username', username);
-    await prefs.setString('qbit_password', _passwordController.text.trim());
-    await prefs.setBool('qbit_https', _useHttps);
-    await prefs.remove('qbit_url'); // 清理旧版遗留键
-
     final cfg = ServerConfig(
       name: _nameController.text.trim(),
       url: _buildUrl(),
@@ -130,6 +127,41 @@ class _LoginScreenState extends State<LoginScreen> {
       port: _portController.text.trim(),
       https: _useHttps,
     );
+
+    final old = widget.editServer;
+    if (old != null) {
+      // —— 编辑模式 ——
+      // 主键（url+username）变了，先删旧记录，避免残留重复项
+      if (old.url != cfg.url || old.username != cfg.username) {
+        await QBitApi.removeServer(old);
+      }
+      await QBitApi.upsertServer(cfg);
+
+      // 若编辑的正是「当前使用中」的服务器，同步活动配置与运行中的会话
+      final active = await QBitApi.loadSavedConfig();
+      final wasActive = active != null &&
+          active.url == old.url &&
+          active.username == old.username;
+      if (wasActive) {
+        await QBitApi.setActiveServer(cfg);
+        QBitApi().setServer(cfg);
+        unawaited(QBitApi().connect());
+      }
+      if (!mounted) return;
+      Get.back(result: true); // 返回设置页，由其刷新列表
+      return;
+    }
+
+    // —— 新增模式 ——：写入活动配置并切换到该服务器
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('qbit_name', _nameController.text.trim());
+    await prefs.setString('qbit_host', host);
+    await prefs.setString('qbit_port', _portController.text.trim());
+    await prefs.setString('qbit_username', username);
+    await prefs.setString('qbit_password', _passwordController.text.trim());
+    await prefs.setBool('qbit_https', _useHttps);
+    await prefs.remove('qbit_url'); // 清理旧版遗留键
+
     // 加入/更新服务器列表（供设置页切换）
     await QBitApi.upsertServer(cfg);
 
@@ -180,7 +212,7 @@ class _LoginScreenState extends State<LoginScreen> {
         elevation: 0,
         scrolledUnderElevation: 0,
         centerTitle: true,
-        title: Text('添加服务器',
+        title: Text(widget.isEditing ? '编辑服务器' : '添加服务器',
             style: TextStyle(color: _textColor, fontSize: 17, fontWeight: FontWeight.w600)),
         leading: canPop
             ? CupertinoButton(
