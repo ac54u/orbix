@@ -5,6 +5,7 @@ import 'package:get/get.dart';
 import '../services/qbit_api.dart';
 import 'login_screen.dart';
 import 'add_torrent_screen.dart';
+import 'torrent_detail_screen.dart';
 import '../theme/app_colors.dart';
 
 class MainScreen extends StatefulWidget {
@@ -284,6 +285,14 @@ class _MainScreenState extends State<MainScreen> {
         ],
       ),
     );
+  }
+
+  // 点按卡片 → 打开详情页；返回后刷新列表（详情页可能已删除/改动该任务）
+  Future<void> _openDetail(dynamic t) async {
+    if (t is! Map) return;
+    final map = Map<String, dynamic>.from(t);
+    await Get.to(() => TorrentDetailScreen(torrent: map));
+    if (mounted) _fetchData();
   }
 
   // 执行操作 → 立即刷新 → 反馈
@@ -653,10 +662,15 @@ class _MainScreenState extends State<MainScreen> {
 
         return Padding(
           padding: const EdgeInsets.only(bottom: 16.0),
-          child: hash.isEmpty
-              ? card
-              : _wrapWithContextMenu(
-                  hash: hash, name: name, state: rawState, card: card),
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            // 点按查看详情；长按仍由内部 CupertinoContextMenu 处理
+            onTap: hash.isEmpty ? null : () => _openDetail(t),
+            child: hash.isEmpty
+                ? card
+                : _wrapWithContextMenu(
+                    hash: hash, name: name, state: rawState, card: card),
+          ),
         );
       }).toList(),
     );
