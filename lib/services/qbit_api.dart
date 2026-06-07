@@ -416,6 +416,34 @@ class QBitApi {
         if (currentServer != null) 'Origin': currentServer!.url,
       },
     );
+
+    // 添加前记录已有种子的 hash 集合：qB 的 add 响应（"Ok."/"Fails."）并不可靠，
+    // 以“列表里是否真的多了新种子”为准来判定成功，避免误报失败。
+    Set<String> hashesOf(List<dynamic> list) => list
+        .map((t) => (t is Map ? t['hash'] : null)?.toString() ?? '')
+        .where((h) => h.isNotEmpty)
+        .toSet();
+    Set<String> before = {};
+    try {
+      before = hashesOf(await getTorrents());
+    } catch (_) {}
+    // 核对是否真的新增了种子。qB 收到 .torrent 后是异步解析入库的，
+    // add 接口返回的瞬间列表里往往还没有它，故轮询几次给入库留时间。
+    // 返回 true=确实新增；false=可达但始终没新增；null=列表一直拉不到。
+    Future<bool?> addedNew() async {
+      bool reachable = false;
+      for (var i = 0; i < 5; i++) {
+        try {
+          if (hashesOf(await getTorrents()).difference(before).isNotEmpty) {
+            return true;
+          }
+          reachable = true;
+        } catch (_) {}
+        await Future.delayed(const Duration(milliseconds: 400));
+      }
+      return reachable ? false : null;
+    }
+
     try {
       var r = await _dio.post('/api/v2/torrents/add',
           data: build(), options: opts);
@@ -429,19 +457,21 @@ class QBitApi {
       if (code == 403) return '服务器拒绝（403），可能开启了 CSRF/Host 校验';
       if (code == 415) return '不支持的请求格式（415）';
       if (code < 200 || code >= 300) return '服务器返回状态码 $code';
-      // 不同版本成功返回 200 "Ok." 或 204 空响应；"Fails." 才是失败
+      // "Fails." 既可能是“重复种子（其实已在列表）”，也可能是“链接/文件无效”。
+      // 以列表为准：真的多了新种子就是成功；否则才提示已存在/无效。
       if (r.data.toString().toLowerCase().contains('fail')) {
-        return '服务器拒绝该种子（链接无效或已存在）';
+        if (await addedNew() == true) return null;
+        return '该种子已在列表中，或链接/文件无效';
       }
       return null;
     } on DioException catch (e) {
       print("添加任务失败: $e");
-      // 字节已完整发出、服务器已收到并同步处理，只是回执没按时回来。
-      // 这种 send/receive 超时按“已添加”处理，避免“服务器加成功、客户端误报失败”。
-      // （后续列表刷新会确认结果；真正没加上时也只是少一条，可重试。）
+      // 字节已发出、服务器可能已同步处理，只是回执超时。以列表核对：
+      // 确实新增→成功；无法核对（连服务器都不通）→乐观当成功，避免误报；
+      // 能核对且没新增→服务器确实没收到，照实报错。
       if (e.type == DioExceptionType.sendTimeout ||
           e.type == DioExceptionType.receiveTimeout) {
-        return null;
+        return (await addedNew() == false) ? _describeDioError(e) : null;
       }
       return _describeDioError(e);
     }
