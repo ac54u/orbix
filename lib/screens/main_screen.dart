@@ -880,11 +880,22 @@ class _ServerSettingsPageState extends State<ServerSettingsPage> {
     );
   }
 
+  // 以底部 Page Sheet（半屏模态）弹出登录页：顶部留隙、上方圆角、可下拉关闭。
+  Future<T?> _presentLoginSheet<T>({ServerConfig? editServer}) {
+    return Get.bottomSheet<T>(
+      LoginScreen(editServer: editServer, asSheet: true),
+      isScrollControlled: true, // 解除半屏高度限制，方可自定义高度
+      backgroundColor: Colors.transparent, // 由内部容器绘制圆角背景
+      barrierColor: Colors.black54,
+      // enableDrag 默认 true：在顶部按住下拉即可关闭
+    );
+  }
+
   Future<void> _addServer() async {
-    // 进入登录页添加（输入框为空）；保存后它会 upsert 并 Get.offAll 到新的 MainScreen
-    await Get.to(() => const LoginScreen());
-    // 返回后（取消的情况）刷新一次列表
+    // 半屏弹出添加（输入框为空）；保存后设为活动服务器并切回种子页
+    final added = await _presentLoginSheet<bool>();
     await _load();
+    if (added == true) widget.onSwitched?.call();
   }
 
   // 长按服务器：编辑 / 删除
@@ -919,9 +930,9 @@ class _ServerSettingsPageState extends State<ServerSettingsPage> {
     );
   }
 
-  // 进入登录页编辑该服务器；返回后刷新列表
+  // 半屏弹出编辑该服务器；返回后刷新列表
   Future<void> _editServer(ServerConfig s) async {
-    final changed = await Get.to(() => LoginScreen(editServer: s));
+    final changed = await _presentLoginSheet<bool>(editServer: s);
     await _load();
     if (changed == true && mounted) _toast('已更新 ${_label(s)}', ok: true);
   }

@@ -10,7 +10,12 @@ import '../theme/app_colors.dart';
 class LoginScreen extends StatefulWidget {
   /// 非空 = 编辑现有服务器（回填该服务器信息）；为空 = 全新添加（清空输入框）。
   final ServerConfig? editServer;
-  const LoginScreen({super.key, this.editServer});
+
+  /// true = 以底部 Page Sheet（模态半屏）形式呈现（设置页添加/编辑用）；
+  /// false = 整页呈现（首次启动 Welcome → 登录用）。
+  final bool asSheet;
+
+  const LoginScreen({super.key, this.editServer, this.asSheet = false});
 
   bool get isEditing => editServer != null;
 
@@ -167,6 +172,14 @@ class _LoginScreenState extends State<LoginScreen> {
 
     final api = QBitApi();
     api.setServer(cfg);
+
+    if (widget.asSheet) {
+      // 半屏弹出：新服务器即设为活动并预登录，关闭弹窗交回设置页刷新
+      unawaited(api.connect());
+      if (!mounted) return;
+      Get.back(result: true);
+      return;
+    }
     Get.offAll(() => const MainScreen());
   }
 
@@ -204,6 +217,11 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    return widget.asSheet ? _buildSheet(context) : _buildFullPage(context);
+  }
+
+  // —— 整页呈现（首次启动）——
+  Widget _buildFullPage(BuildContext context) {
     final canPop = Navigator.of(context).canPop();
     return Scaffold(
       backgroundColor: _bgColor,
@@ -233,77 +251,145 @@ class _LoginScreenState extends State<LoginScreen> {
       body: SafeArea(
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // 1. 服务器信息
-              _buildSectionHeader('服务器信息'),
-              _buildCardGroup([
-                _buildTextField(_nameController, '名称（可选）', icon: CupertinoIcons.tag, isLast: false),
-                _buildTextField(_hostController, '主机，例：192.168.1.2',
-                    icon: CupertinoIcons.link, keyboardType: TextInputType.url, isLast: false),
-                _buildTextField(_portController, '端口',
-                    icon: CupertinoIcons.number, keyboardType: TextInputType.number, isLast: true),
-              ]),
-
-              // 2. 认证
-              _buildSectionHeader('认证'),
-              _buildCardGroup([
-                _buildTextField(_usernameController, '用户名',
-                    icon: CupertinoIcons.person, isLast: false),
-                _buildTextField(_passwordController, '密码',
-                    icon: CupertinoIcons.lock, obscure: _obscurePassword, isLast: true,
-                    suffix: GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: () => setState(() => _obscurePassword = !_obscurePassword),
-                      child: Padding(
-                        padding: const EdgeInsets.only(left: 8, right: 16),
-                        child: Icon(
-                          _obscurePassword
-                              ? CupertinoIcons.eye_slash_fill
-                              : CupertinoIcons.eye_fill,
-                          color: _sectionTitleColor,
-                          size: 18,
-                        ),
-                      ),
-                    )),
-              ]),
-
-              // 3. 使用 HTTPS
-              const SizedBox(height: 24),
-              _buildCardGroup([
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 4, 12, 4),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(CupertinoIcons.lock_shield, color: _sectionTitleColor, size: 20),
-                          const SizedBox(width: 10),
-                          Text('使用 HTTPS', style: TextStyle(fontSize: 16, color: _textColor)),
-                        ],
-                      ),
-                      CupertinoSwitch(
-                        value: _useHttps,
-                        onChanged: (val) => setState(() {
-                          _useHttps = val;
-                          _testResult = null; // 改了协议，旧的测试结果作废
-                        }),
-                      ),
-                    ],
-                  ),
-                ),
-              ]),
-
-              // 4. 测试连接区
-              const SizedBox(height: 24),
-              _buildCardGroup([_buildTestRow(), ..._buildResultPanel()]),
-              const SizedBox(height: 40),
-            ],
-          ),
+          child: _formBody(),
         ),
       ),
+    );
+  }
+
+  // —— 底部 Page Sheet 呈现（设置页添加/编辑）——
+  // 顶部留出一小段间隙露出背后页面，仅上方两角圆角，可向下拖拽关闭。
+  Widget _buildSheet(BuildContext context) {
+    final mq = MediaQuery.of(context);
+    final height = mq.size.height * 0.92;
+    return Container(
+      height: height,
+      decoration: BoxDecoration(
+        color: _bgColor,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        children: [
+          // 抓手
+          Container(
+            margin: const EdgeInsets.only(top: 8, bottom: 4),
+            width: 36,
+            height: 5,
+            decoration: BoxDecoration(
+              color: _placeholderColor,
+              borderRadius: BorderRadius.circular(3),
+            ),
+          ),
+          // 头部：取消 / 标题 / 保存
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                CupertinoButton(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  onPressed: () => Get.back(),
+                  child: const Text('取消',
+                      style: TextStyle(color: _accent, fontSize: 16)),
+                ),
+                Text(widget.isEditing ? '编辑服务器' : '添加服务器',
+                    style: TextStyle(
+                        color: _textColor, fontSize: 17, fontWeight: FontWeight.w600)),
+                CupertinoButton(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  onPressed: _handleSave,
+                  child: const Text('保存',
+                      style: TextStyle(
+                          color: _accent, fontSize: 16, fontWeight: FontWeight.w600)),
+                ),
+              ],
+            ),
+          ),
+          Divider(height: 0.5, thickness: 0.5, color: _hairline),
+          // 表单（随键盘上推）
+          Expanded(
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: EdgeInsets.only(bottom: mq.viewInsets.bottom),
+              child: _formBody(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // 表单主体：整页与 Page Sheet 共用
+  Widget _formBody() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // 1. 服务器信息
+        _buildSectionHeader('服务器信息'),
+        _buildCardGroup([
+          _buildTextField(_nameController, '名称（可选）', icon: CupertinoIcons.tag, isLast: false),
+          _buildTextField(_hostController, '主机，例：192.168.1.2',
+              icon: CupertinoIcons.link, keyboardType: TextInputType.url, isLast: false),
+          _buildTextField(_portController, '端口',
+              icon: CupertinoIcons.number, keyboardType: TextInputType.number, isLast: true),
+        ]),
+
+        // 2. 认证
+        _buildSectionHeader('认证'),
+        _buildCardGroup([
+          _buildTextField(_usernameController, '用户名',
+              icon: CupertinoIcons.person, isLast: false),
+          _buildTextField(_passwordController, '密码',
+              icon: CupertinoIcons.lock, obscure: _obscurePassword, isLast: true,
+              suffix: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => setState(() => _obscurePassword = !_obscurePassword),
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 8, right: 16),
+                  child: Icon(
+                    _obscurePassword
+                        ? CupertinoIcons.eye_slash_fill
+                        : CupertinoIcons.eye_fill,
+                    color: _sectionTitleColor,
+                    size: 18,
+                  ),
+                ),
+              )),
+        ]),
+
+        // 3. 使用 HTTPS
+        const SizedBox(height: 24),
+        _buildCardGroup([
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 12, 4),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    Icon(CupertinoIcons.lock_shield, color: _sectionTitleColor, size: 20),
+                    const SizedBox(width: 10),
+                    Text('使用 HTTPS', style: TextStyle(fontSize: 16, color: _textColor)),
+                  ],
+                ),
+                CupertinoSwitch(
+                  value: _useHttps,
+                  onChanged: (val) => setState(() {
+                    _useHttps = val;
+                    _testResult = null; // 改了协议，旧的测试结果作废
+                  }),
+                ),
+              ],
+            ),
+          ),
+        ]),
+
+        // 4. 测试连接区
+        const SizedBox(height: 24),
+        _buildCardGroup([_buildTestRow(), ..._buildResultPanel()]),
+        const SizedBox(height: 40),
+      ],
     );
   }
 
