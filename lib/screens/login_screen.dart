@@ -261,7 +261,10 @@ class _LoginScreenState extends State<LoginScreen> {
   // 顶部留出一小段间隙露出背后页面，仅上方两角圆角，可向下拖拽关闭。
   Widget _buildSheet(BuildContext context) {
     final mq = MediaQuery.of(context);
-    final height = mq.size.height * 0.92;
+    final maxHeight = mq.size.height * 0.92;
+    // 键盘弹出时，模态 sheet 会被整体上推 viewInsets.bottom；
+    // 同步把高度减去键盘高度，保持顶部位置不变，避免顶栏顶到状态栏。
+    final height = (maxHeight - mq.viewInsets.bottom).clamp(0.0, maxHeight);
     return Container(
       height: height,
       decoration: BoxDecoration(
@@ -307,11 +310,10 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
           ),
           Divider(height: 0.5, thickness: 0.5, color: _hairline),
-          // 表单（随键盘上推）
+          // 表单：高度已随键盘收缩，内部正常滚动即可（无需再加键盘内边距）
           Expanded(
             child: SingleChildScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
-              padding: EdgeInsets.only(bottom: mq.viewInsets.bottom),
               child: _formBody(),
             ),
           ),
