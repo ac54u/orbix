@@ -539,4 +539,74 @@ class QBitApi {
       return null;
     }
   }
+
+  /// 带会话保活的表单 POST，返回完整响应（供需要读取响应体的接口使用）。
+  Future<Response?> _authedPost(String path, Map<String, dynamic> form) async {
+    final opts = Options(
+      contentType: Headers.formUrlEncodedContentType,
+      validateStatus: (s) => s != null && s < 500,
+    );
+    try {
+      var r = await _dio.post(path, data: form, options: opts);
+      if (r.statusCode == 401 || r.statusCode == 403) {
+        final res = await connect();
+        if (!res.success) return null;
+        r = await _dio.post(path, data: form, options: opts);
+      }
+      return (r.statusCode != null && r.statusCode! < 300) ? r : null;
+    } on DioException catch (e) {
+      print("请求失败 $path: $e");
+      return null;
+    }
+  }
+
+  // ——— 搜索引擎（联网搜种，依赖服务端搜索插件）———
+
+  /// 已安装的搜索插件列表。enabled 为 true 的插件才会参与「enabled」搜索。
+  Future<List<dynamic>> getSearchPlugins() async {
+    final r = await _authedGet('/api/v2/search/plugins');
+    final data = r?.data;
+    return data is List ? data : [];
+  }
+
+  /// 启动一次搜索，返回搜索 job 的 id（失败返回 null）。
+  Future<int?> startSearch(String pattern,
+      {String plugins = 'enabled', String category = 'all'}) async {
+    final r = await _authedPost('/api/v2/search/start',
+        {'pattern': pattern, 'plugins': plugins, 'category': category});
+    final data = r?.data;
+    if (data is Map && data['id'] != null) {
+      return (data['id'] as num).toInt();
+    }
+    return null;
+  }
+
+  /// 查询某个搜索 job 的状态：{status: 'Running'|'Stopped', total: n}。
+  Future<Map<String, dynamic>?> getSearchStatus(int id) async {
+    final r = await _authedGet('/api/v2/search/status', query: {'id': id});
+    final data = r?.data;
+    if (data is List && data.isNotEmpty && data.first is Map) {
+      return Map<String, dynamic>.from(data.first);
+    }
+    return null;
+  }
+
+  /// 拉取搜索结果：{results: [...], status, total}。
+  Future<Map<String, dynamic>?> getSearchResults(int id,
+      {int limit = 0, int offset = 0}) async {
+    final r = await _authedGet('/api/v2/search/results',
+        query: {'id': id, 'limit': limit, 'offset': offset});
+    final data = r?.data;
+    return data is Map ? Map<String, dynamic>.from(data) : null;
+  }
+
+  /// 停止搜索 job。
+  Future<void> stopSearch(int id) async {
+    await _authedPost('/api/v2/search/stop', {'id': id.toString()});
+  }
+
+  /// 删除搜索 job（释放服务端资源）。
+  Future<void> deleteSearch(int id) async {
+    await _authedPost('/api/v2/search/delete', {'id': id.toString()});
+  }
 }

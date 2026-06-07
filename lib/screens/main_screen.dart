@@ -6,6 +6,8 @@ import '../services/qbit_api.dart';
 import 'login_screen.dart';
 import 'add_torrent_screen.dart';
 import 'torrent_detail_screen.dart';
+import 'stats_screen.dart';
+import 'search_screen.dart';
 import '../theme/app_colors.dart';
 
 class MainScreen extends StatefulWidget {
@@ -328,8 +330,8 @@ class _MainScreenState extends State<MainScreen> {
                 index: _currentIndex,
                 children: [
                   _buildTorrentPage(),
-                  _buildSimplePage("统计", CupertinoIcons.chart_bar_alt_fill),
-                  _buildSimplePage("搜索", CupertinoIcons.search),
+                  const StatsScreen(),
+                  const SearchScreen(),
                   ServerSettingsPage(
                     // 切换服务器后回到「种子」页并立即刷新，给出直观反馈
                     onSwitched: () {
@@ -355,35 +357,6 @@ class _MainScreenState extends State<MainScreen> {
         color: AppColors.of(AppColors.label),
         letterSpacing: -0.5,
       );
-
-  // 占位页（统计/搜索）：同样固定标题，内容居中
-  Widget _buildSimplePage(String title, IconData icon) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: Text(title, style: _pageTitleStyle),
-          ),
-        ),
-        Expanded(
-          child: Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(icon, size: 48, color: AppColors.of(AppColors.placeholder)),
-                const SizedBox(height: 12),
-                Text("$title · 开发中",
-                    style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 16)),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
 
   // 种子主页面：顶部（筛选/添加 + 标题 + 速度总览）固定，仅列表滚动
   Widget _buildTorrentPage() {
