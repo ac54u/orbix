@@ -318,6 +318,31 @@ class QBitApi {
     return data is Map ? Map<String, dynamic>.from(data) : {};
   }
 
+  /// 单个种子的「通用属性」（保存路径、做种/分享、连接数、各类时间等）
+  Future<Map<String, dynamic>?> getProperties(String hash) async {
+    final r = await _authedGet('/api/v2/torrents/properties',
+        query: {'hash': hash});
+    final data = r?.data;
+    return data is Map ? Map<String, dynamic>.from(data) : null;
+  }
+
+  /// 单个种子在列表中的最新快照（按 hash 过滤，返回那条 Map）
+  Future<Map<String, dynamic>?> getTorrentByHash(String hash) async {
+    final r = await _authedGet('/api/v2/torrents/info', query: {'hashes': hash});
+    final data = r?.data;
+    if (data is List && data.isNotEmpty && data.first is Map) {
+      return Map<String, dynamic>.from(data.first);
+    }
+    return null;
+  }
+
+  /// 种子内的文件列表（名称、大小、进度、优先级）
+  Future<List<dynamic>> getTorrentFiles(String hash) async {
+    final r = await _authedGet('/api/v2/torrents/files', query: {'hash': hash});
+    final data = r?.data;
+    return data is List ? data : [];
+  }
+
   // ——— 种子操作（长按菜单）———
   // qBittorrent v5.x（Web API 2.11+）把 resume/pause 改名为 start/stop。
   // 这些接口成功时返回 200。
