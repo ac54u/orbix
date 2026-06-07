@@ -10,7 +10,6 @@ dependencies:
   flutter:
     sdk: flutter
   cupertino_icons: ^1.0.6
-  percent_indicator: ^4.2.3
   dio: ^5.4.0
   dio_cookie_manager: ^3.1.1 # 用于拦截并保存 qBit 返回的 Cookie
   cookie_jar: ^4.0.8         # Cookie 存储器

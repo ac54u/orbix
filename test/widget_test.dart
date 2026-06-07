@@ -1,30 +1,37 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
-import 'package:flutter/material.dart';
+// Orbix 单元测试：覆盖 URL 拼接的容错逻辑（纯函数，无需启动 UI）。
 import 'package:flutter_test/flutter_test.dart';
-
-import 'package:orbix/main.dart';
+import 'package:orbix/services/qbit_api.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  group('QBitApi.buildUrl', () {
+    test('普通主机 + 端口', () {
+      expect(QBitApi.buildUrl('192.168.1.2', '8080', false),
+          'http://192.168.1.2:8080');
+    });
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    test('开启 HTTPS', () {
+      expect(QBitApi.buildUrl('nas.local', '8443', true),
+          'https://nas.local:8443');
+    });
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+    test('端口 443 强制 https 且省略默认端口', () {
+      expect(QBitApi.buildUrl('example.com', '443', false),
+          'https://example.com');
+    });
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    test('端口 80 强制 http 且省略默认端口', () {
+      expect(QBitApi.buildUrl('example.com', '80', true),
+          'http://example.com');
+    });
+
+    test('粘贴完整 URL 时以其协议/端口为准', () {
+      expect(QBitApi.buildUrl('https://example.com:9090', '8080', false),
+          'https://example.com:9090');
+    });
+
+    test('去除主机结尾多余斜杠', () {
+      expect(QBitApi.buildUrl('192.168.1.2/', '8080', false),
+          'http://192.168.1.2:8080');
+    });
   });
 }
