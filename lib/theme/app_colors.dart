@@ -46,4 +46,13 @@ class AppColors {
     final ctx = Get.context;
     return ctx != null ? CupertinoDynamicColor.resolve(c, ctx) : c.color;
   }
+
+  /// 在页面 build() 顶部调用：让该页订阅系统明暗变化。
+  ///
+  /// `of()` 走的是全局 Get.context，调用方并不会因明暗翻转而被标记重建，
+  /// 于是颜色要等下一次 setState 才更新（表现为「换肤有延迟」）。这里用本页
+  /// 自己的 context 订阅 platformBrightness，明暗一变即时重建当前页。
+  static void watch(BuildContext context) {
+    MediaQuery.platformBrightnessOf(context);
+  }
 }

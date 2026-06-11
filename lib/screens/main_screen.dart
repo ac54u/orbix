@@ -319,6 +319,7 @@ class _MainScreenState extends State<MainScreen> {
 
   @override
   Widget build(BuildContext context) {
+    AppColors.watch(context);
     return Scaffold(
       backgroundColor: AppColors.of(AppColors.mainBg),
       body: SafeArea(
@@ -848,6 +849,7 @@ class _ServerSettingsPageState extends State<ServerSettingsPage> {
 
   @override
   Widget build(BuildContext context) {
+    AppColors.watch(context);
     return SafeArea(
       bottom: false,
       child: Column(

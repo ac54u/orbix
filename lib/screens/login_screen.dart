@@ -217,6 +217,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    AppColors.watch(context);
     return widget.asSheet ? _buildSheet(context) : _buildFullPage(context);
   }
 

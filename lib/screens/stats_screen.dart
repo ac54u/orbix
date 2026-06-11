@@ -131,6 +131,7 @@ class _StatsScreenState extends State<StatsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    AppColors.watch(context);
     final c = _counts();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
