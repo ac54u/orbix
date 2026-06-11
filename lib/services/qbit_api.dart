@@ -318,6 +318,13 @@ class QBitApi {
     return data is Map ? Map<String, dynamic>.from(data) : {};
   }
 
+  /// qBittorrent 应用版本号（如 "v4.6.0"）；失败返回 null。
+  Future<String?> getAppVersion() async {
+    final r = await _authedGet('/api/v2/app/version');
+    final v = r?.data?.toString().trim();
+    return (v != null && v.isNotEmpty) ? v : null;
+  }
+
   /// 单个种子的「通用属性」（保存路径、做种/分享、连接数、各类时间等）
   Future<Map<String, dynamic>?> getProperties(String hash) async {
     final r = await _authedGet('/api/v2/torrents/properties',

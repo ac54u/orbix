@@ -803,12 +803,12 @@ class ServerSettingsPage extends StatefulWidget {
 }
 
 class _ServerSettingsPageState extends State<ServerSettingsPage> {
-  static const Color _accent = Color(0xFF007AFF);
   static const Color _inkMuted = Color(0xFF8E8E93); // 中性灰，明暗皆可读
   Color get _ink => AppColors.of(AppColors.label); // 主文字，随明暗动态解析
 
   // 当前活动服务器（用于在设置页摘要展示）
   ServerConfig? _active;
+  String? _version; // qBittorrent 应用版本（异步获取）
   bool _loading = true;
 
   @override
@@ -822,8 +822,15 @@ class _ServerSettingsPageState extends State<ServerSettingsPage> {
     if (!mounted) return;
     setState(() {
       _active = active;
+      _version = null;
       _loading = false;
     });
+    // 版本号异步获取，不阻塞卡片渲染
+    if (active != null) {
+      final v = await QBitApi().getAppVersion();
+      if (!mounted) return;
+      setState(() => _version = v);
+    }
   }
 
   String _label(ServerConfig s) =>
@@ -887,16 +894,18 @@ class _ServerSettingsPageState extends State<ServerSettingsPage> {
     );
   }
 
-  // 摘要卡片：展示当前服务器，点击进入「服务器管理」页。
+  // 摘要卡片：展示当前服务器信息，点击进入「服务器管理」页。
   Widget _buildSummaryCard() {
-    return Container(
+    final s = _active;
+    final card = Container(
+      width: double.infinity,
       decoration: BoxDecoration(
-        color: AppColors.of(AppColors.card),
+        color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withOpacity(0.02),
-              blurRadius: 10,
+              color: Colors.black.withOpacity(0.04),
+              blurRadius: 12,
               offset: const Offset(0, 4)),
         ],
       ),
@@ -905,53 +914,117 @@ class _ServerSettingsPageState extends State<ServerSettingsPage> {
         behavior: HitTestBehavior.opaque,
         onTap: _openManagement,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          child: Row(
-            children: [
-              Icon(
-                _active != null
-                    ? CupertinoIcons.checkmark_circle_fill
-                    : CupertinoIcons.circle,
-                color: _active != null
-                    ? _accent
-                    : AppColors.of(AppColors.placeholder),
-                size: 22,
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
+          padding: const EdgeInsets.all(20),
+          child: s == null
+              ? _buildEmptyState()
+              : Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // —— 第一行：当前服务器 + HTTPS 标签 ——
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Text(
+                          '当前服务器',
+                          style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.grey.shade500,
+                              fontWeight: FontWeight.w600),
+                        ),
+                        _buildHttpsBadge(s),
+                      ],
+                    ),
+                    // —— 第二行：服务器名称主标题 ——
+                    const SizedBox(height: 16),
                     Text(
-                      _active != null ? _label(_active!) : '未连接服务器',
-                      style: TextStyle(
-                          fontSize: 16,
-                          color: _active != null ? _ink : _inkMuted,
-                          fontWeight: FontWeight.w600),
+                      _label(s),
+                      style: const TextStyle(
+                          fontSize: 28,
+                          color: Colors.black,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: -0.5),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      _active != null
-                          ? '${_active!.url}  ·  ${_active!.username}'
-                          : '点击管理服务器',
-                      style: const TextStyle(fontSize: 12, color: _inkMuted),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                    // —— 三行详情：URL / 版本 / 用户名 ——
+                    const SizedBox(height: 16),
+                    _buildDetailRow(Icons.dns, s.url),
+                    const SizedBox(height: 12),
+                    _buildDetailRow(Icons.info_outline, _version ?? '—'),
+                    const SizedBox(height: 12),
+                    _buildDetailRow(Icons.person, s.username),
                   ],
                 ),
-              ),
-              const Padding(
-                padding: EdgeInsets.only(left: 8),
-                child: Icon(CupertinoIcons.chevron_forward,
-                    color: _inkMuted, size: 18),
-              ),
-            ],
-          ),
         ),
       ),
+    );
+    return card;
+  }
+
+  // HTTPS 安全标签：url 含 https 或端口为 443 时显示，否则隐藏。
+  Widget _buildHttpsBadge(ServerConfig s) {
+    final secure = s.url.contains('https') || s.port == '443';
+    if (!secure) return const SizedBox.shrink();
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.green.shade100,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.lock, size: 14, color: Colors.green.shade700),
+          const SizedBox(width: 4),
+          Text(
+            'HTTPS',
+            style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: Colors.green.shade700,
+                letterSpacing: 0.5),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // 详情行：蓝色前缀图标 + 灰色信息文本。
+  Widget _buildDetailRow(IconData icon, String text) {
+    return Row(
+      children: [
+        Icon(icon, size: 20, color: Colors.blue.shade500),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(
+            text,
+            style: TextStyle(
+                fontSize: 16,
+                color: Colors.grey.shade600,
+                fontWeight: FontWeight.w600),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
+    );
+  }
+
+  // 未配置服务器时的占位。
+  Widget _buildEmptyState() {
+    return Row(
+      children: [
+        Icon(CupertinoIcons.circle,
+            color: AppColors.of(AppColors.placeholder), size: 22),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text('未连接服务器  ·  点击管理服务器',
+              style: TextStyle(fontSize: 15, color: Colors.grey.shade500)),
+        ),
+        const Icon(CupertinoIcons.chevron_forward,
+            color: Color(0xFF8E8E93), size: 18),
+      ],
     );
   }
 }
