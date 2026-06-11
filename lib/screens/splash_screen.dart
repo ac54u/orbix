@@ -3,14 +3,12 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../services/qbit_api.dart';
 import '../theme/app_colors.dart';
-import 'main_screen.dart';
 import 'welcome_screen.dart';
-import 'login_screen.dart';
+import 'server_selection_screen.dart';
 
 /// 启动决策页：
-///  - 本地无凭据      → 欢迎页（首次引导）
-///  - 有凭据且连接成功 → 直接进主页（记住已登录）
-///  - 有凭据但连接失败 → 登录页（已预填，便于修正）
+///  - 本地无服务器 → 欢迎页（首次引导）
+///  - 已有服务器   → 服务器选择页（启动首页）
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
 
@@ -28,26 +26,14 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   Future<void> _decideStart() async {
-    final config = await QBitApi.loadSavedConfig();
-
-    // 首次启动 / 未配置过 → 欢迎页
-    if (config == null) {
-      if (!mounted) return;
-      Get.offAll(() => const WelcomeScreen());
-      return;
-    }
-
-    // 有凭据：尝试自动登录
-    final api = QBitApi();
-    api.setServer(config);
-    final result = await api.connect();
-
+    final servers = await QBitApi.loadServers();
     if (!mounted) return;
-    if (result.success) {
-      Get.offAll(() => const MainScreen());
+
+    // 首次启动 / 未配置过 → 欢迎页；否则进入服务器选择页（启动首页）
+    if (servers.isEmpty) {
+      Get.offAll(() => const WelcomeScreen());
     } else {
-      // 凭据失效或服务器不可达 → 登录页（已预填本地值，可直接修改重试）
-      Get.offAll(() => const LoginScreen());
+      Get.offAll(() => const ServerSelectionPage());
     }
   }
 

@@ -3,9 +3,9 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../services/qbit_api.dart';
-import 'login_screen.dart';
 import 'add_torrent_screen.dart';
 import 'torrent_detail_screen.dart';
+import 'server_management_screen.dart';
 import 'stats_screen.dart';
 import 'search_screen.dart';
 import '../theme/app_colors.dart';
@@ -807,10 +807,8 @@ class _ServerSettingsPageState extends State<ServerSettingsPage> {
   static const Color _inkMuted = Color(0xFF8E8E93); // 中性灰，明暗皆可读
   Color get _ink => AppColors.of(AppColors.label); // 主文字，随明暗动态解析
 
-  List<ServerConfig> _servers = [];
-  // 当前活动服务器用 url + username 共同标识（同地址可能多个账号）
-  String? _activeUrl;
-  String? _activeUser;
+  // 当前活动服务器（用于在设置页摘要展示）
+  ServerConfig? _active;
   bool _loading = true;
 
   @override
@@ -820,135 +818,25 @@ class _ServerSettingsPageState extends State<ServerSettingsPage> {
   }
 
   Future<void> _load() async {
-    final servers = await QBitApi.loadServers();
     final active = await QBitApi.loadSavedConfig();
     if (!mounted) return;
     setState(() {
-      _servers = servers;
-      _activeUrl = active?.url;
-      _activeUser = active?.username;
+      _active = active;
       _loading = false;
     });
-  }
-
-  bool _isActive(ServerConfig s) =>
-      _activeUrl != null && s.url == _activeUrl && s.username == _activeUser;
-
-  Future<void> _switchTo(ServerConfig s) async {
-    if (_isActive(s)) return;
-    await QBitApi.setActiveServer(s);
-    final api = QBitApi();
-    api.setServer(s);
-    // 清旧会话并登录新服务器（失败也无妨，主界面轮询会自愈）
-    unawaited(api.connect());
-    await _load(); // 重新读取，刷新「使用中」标记
-    if (!mounted) return;
-    _toast('已切换到 ${_label(s)}', ok: true);
-    widget.onSwitched?.call();
-  }
-
-  Future<void> _confirmDelete(ServerConfig s) async {
-    if (_isActive(s)) {
-      _toast('当前使用中的服务器无法删除', ok: false);
-      return;
-    }
-    showCupertinoDialog<void>(
-      context: context,
-      builder: (ctx) => CupertinoAlertDialog(
-        title: const Text('删除服务器'),
-        content: Padding(
-          padding: const EdgeInsets.only(top: 8),
-          child: Text('确定删除「${_label(s)}」？'),
-        ),
-        actions: [
-          CupertinoDialogAction(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('取消'),
-          ),
-          CupertinoDialogAction(
-            isDestructiveAction: true,
-            onPressed: () async {
-              Navigator.pop(ctx);
-              await QBitApi.removeServer(s);
-              await _load();
-              if (mounted) _toast('已删除', ok: true);
-            },
-            child: const Text('删除'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // 以底部 Page Sheet（半屏模态）弹出登录页：顶部留隙、上方圆角、可下拉关闭。
-  Future<T?> _presentLoginSheet<T>({ServerConfig? editServer}) {
-    return Get.bottomSheet<T>(
-      LoginScreen(editServer: editServer, asSheet: true),
-      isScrollControlled: true, // 解除半屏高度限制，方可自定义高度
-      backgroundColor: Colors.transparent, // 由内部容器绘制圆角背景
-      barrierColor: Colors.black54,
-      // enableDrag 默认 true：在顶部按住下拉即可关闭
-    );
-  }
-
-  Future<void> _addServer() async {
-    // 半屏弹出添加（输入框为空）；保存后设为活动服务器并切回种子页
-    final added = await _presentLoginSheet<bool>();
-    await _load();
-    if (added == true) widget.onSwitched?.call();
-  }
-
-  // 长按服务器：编辑 / 删除
-  void _showServerActions(ServerConfig s) {
-    showCupertinoModalPopup<void>(
-      context: context,
-      builder: (ctx) => CupertinoActionSheet(
-        title: Text(_label(s)),
-        message: Text('${s.url}  ·  ${s.username}'),
-        actions: [
-          CupertinoActionSheetAction(
-            onPressed: () {
-              Navigator.pop(ctx);
-              _editServer(s);
-            },
-            child: const Text('编辑'),
-          ),
-          CupertinoActionSheetAction(
-            isDestructiveAction: true,
-            onPressed: () {
-              Navigator.pop(ctx);
-              _confirmDelete(s);
-            },
-            child: const Text('删除'),
-          ),
-        ],
-        cancelButton: CupertinoActionSheetAction(
-          onPressed: () => Navigator.pop(ctx),
-          child: const Text('取消'),
-        ),
-      ),
-    );
-  }
-
-  // 半屏弹出编辑该服务器；返回后刷新列表
-  Future<void> _editServer(ServerConfig s) async {
-    final changed = await _presentLoginSheet<bool>(editServer: s);
-    await _load();
-    if (changed == true && mounted) _toast('已更新 ${_label(s)}', ok: true);
   }
 
   String _label(ServerConfig s) =>
       s.name.isNotEmpty ? s.name : s.url.replaceFirst(RegExp(r'^https?://'), '');
 
-  void _toast(String msg, {required bool ok}) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(msg),
-        backgroundColor: ok ? const Color(0xFF34C759) : const Color(0xFFFF3B30),
-        behavior: SnackBarBehavior.floating,
-        duration: const Duration(milliseconds: 1400),
+  // 点击摘要卡片：从右向左滑入「服务器管理」页；返回后刷新摘要。
+  Future<void> _openManagement() async {
+    await Navigator.of(context).push(
+      CupertinoPageRoute(
+        builder: (_) => ServerManagementPage(onSwitched: widget.onSwitched),
       ),
     );
+    await _load();
   }
 
   @override
@@ -990,7 +878,7 @@ class _ServerSettingsPageState extends State<ServerSettingsPage> {
                     child: Center(child: CupertinoActivityIndicator()),
                   )
                 else
-                  _buildServerCard(),
+                  _buildSummaryCard(),
               ],
             ),
           ),
@@ -999,15 +887,8 @@ class _ServerSettingsPageState extends State<ServerSettingsPage> {
     );
   }
 
-  Widget _buildServerCard() {
-    final rows = <Widget>[];
-    for (var i = 0; i < _servers.length; i++) {
-      final s = _servers[i];
-      rows.add(_buildServerRow(s));
-      rows.add(_hairline());
-    }
-    // 末尾「添加服务器」行
-    rows.add(_buildAddRow());
+  // 摘要卡片：展示当前服务器，点击进入「服务器管理」页。
+  Widget _buildSummaryCard() {
     return Container(
       decoration: BoxDecoration(
         color: AppColors.of(AppColors.card),
@@ -1020,84 +901,55 @@ class _ServerSettingsPageState extends State<ServerSettingsPage> {
         ],
       ),
       clipBehavior: Clip.antiAlias,
-      child: Column(children: rows),
-    );
-  }
-
-  Widget _hairline() =>
-      Container(height: 0.5, color: AppColors.of(AppColors.separator), margin: const EdgeInsets.only(left: 16));
-
-  Widget _buildServerRow(ServerConfig s) {
-    final active = _isActive(s);
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: () => _switchTo(s),
-      onLongPress: () => _showServerActions(s),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        child: Row(
-          children: [
-            Icon(
-              active
-                  ? CupertinoIcons.checkmark_circle_fill
-                  : CupertinoIcons.circle,
-              color: active ? _accent : AppColors.of(AppColors.placeholder),
-              size: 22,
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    _label(s),
-                    style: TextStyle(
-                        fontSize: 16,
-                        color: _ink,
-                        fontWeight:
-                            active ? FontWeight.w700 : FontWeight.w500),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    '${s.url}  ·  ${s.username}',
-                    style: const TextStyle(fontSize: 12, color: _inkMuted),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: _openManagement,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: Row(
+            children: [
+              Icon(
+                _active != null
+                    ? CupertinoIcons.checkmark_circle_fill
+                    : CupertinoIcons.circle,
+                color: _active != null
+                    ? _accent
+                    : AppColors.of(AppColors.placeholder),
+                size: 22,
               ),
-            ),
-            if (active)
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _active != null ? _label(_active!) : '未连接服务器',
+                      style: TextStyle(
+                          fontSize: 16,
+                          color: _active != null ? _ink : _inkMuted,
+                          fontWeight: FontWeight.w600),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      _active != null
+                          ? '${_active!.url}  ·  ${_active!.username}'
+                          : '点击管理服务器',
+                      style: const TextStyle(fontSize: 12, color: _inkMuted),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
               const Padding(
                 padding: EdgeInsets.only(left: 8),
-                child: Text('使用中',
-                    style: TextStyle(
-                        fontSize: 12,
-                        color: _accent,
-                        fontWeight: FontWeight.w600)),
+                child: Icon(CupertinoIcons.chevron_forward,
+                    color: _inkMuted, size: 18),
               ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildAddRow() {
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: _addServer,
-      child: const Padding(
-        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 15),
-        child: Row(
-          children: [
-            Icon(CupertinoIcons.add_circled_solid, color: _accent, size: 22),
-            SizedBox(width: 12),
-            Text('添加服务器',
-                style: TextStyle(
-                    fontSize: 16, color: _accent, fontWeight: FontWeight.w600)),
-          ],
+            ],
+          ),
         ),
       ),
     );
