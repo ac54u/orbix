@@ -8,6 +8,7 @@ import 'package:get/get.dart';
 import '../services/qbit_api.dart';
 import '../theme/app_colors.dart';
 import 'login_screen.dart';
+import 'main_screen.dart';
 
 /// 服务器管理页：从设置页右滑进入。
 /// 展示全部已保存的服务器，左滑可「连接 / 编辑 / 删除」，右上角「+」添加。
@@ -54,18 +55,64 @@ class _ServerManagementPageState extends State<ServerManagementPage> {
   String _label(ServerConfig s) =>
       s.name.isNotEmpty ? s.name : s.url.replaceFirst(RegExp(r'^https?://'), '');
 
-  // —— 连接（切换到该服务器） ——
+  // —— 连接（点击行或左滑「连接」都走这里） ——
+  // 弹出「连接中」状态遮罩，接入真实结果：成功进主界面，失败提示。
   Future<void> _switchTo(ServerConfig s) async {
-    if (_isActive(s)) return;
     await QBitApi.setActiveServer(s);
     final api = QBitApi();
     api.setServer(s);
-    // 清旧会话并登录新服务器（失败也无妨，主界面轮询会自愈）
-    unawaited(api.connect());
+
+    _showConnectingDialog();
+    // 同时等待真实登录与最小展示时长，避免遮罩一闪而过
+    final results = await Future.wait([
+      api.connect(),
+      Future<void>.delayed(const Duration(milliseconds: 600)),
+    ]);
     if (!mounted) return;
-    // 返回设置页并通知主界面回到种子页刷新
-    Navigator.of(context).pop();
-    widget.onSwitched?.call();
+    Navigator.of(context, rootNavigator: true).pop(); // 关闭连接遮罩
+
+    final result = results[0] as ConnectResult;
+    if (result.success) {
+      if (widget.onSwitched != null) {
+        // 来自设置页：返回并通知主界面回到种子页刷新
+        Navigator.of(context).pop();
+        widget.onSwitched!.call();
+      } else {
+        // 来自启动选择页：直接进入主界面
+        Get.offAll(() => const MainScreen());
+      }
+    } else {
+      _toast('连接失败：${result.message}', ok: false);
+      await _load(); // 刷新「使用中」标记
+    }
+  }
+
+  void _showConnectingDialog() {
+    showCupertinoDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => Center(
+        child: Container(
+          width: 120,
+          height: 120,
+          decoration: BoxDecoration(
+            color: AppColors.of(AppColors.card),
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const CupertinoActivityIndicator(radius: 16),
+              const SizedBox(height: 14),
+              Text('连接中...',
+                  style: TextStyle(
+                      fontSize: 13,
+                      color: AppColors.of(AppColors.secondaryLabel))),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   // —— 以底部半屏弹出登录页：添加 / 编辑 ——
@@ -243,9 +290,12 @@ class _ServerManagementPageState extends State<ServerManagementPage> {
   }
 
   Widget _buildServerTile(ServerConfig s, bool active) {
-    return Container(
-      color: AppColors.of(AppColors.card),
-      child: Padding(
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => _switchTo(s), // 点击服务器行即连接
+      child: Container(
+        color: AppColors.of(AppColors.card),
+        child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         child: Row(
           children: [
@@ -291,6 +341,7 @@ class _ServerManagementPageState extends State<ServerManagementPage> {
                         fontWeight: FontWeight.w600)),
               ),
           ],
+          ),
         ),
       ),
     );

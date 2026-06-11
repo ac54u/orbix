@@ -159,20 +159,47 @@ class _ServerSelectionPageState extends State<ServerSelectionPage> {
       body: SafeArea(
         child: Column(
           children: [
+            const SizedBox(height: 32),
+            // —— 顶部发光图标 ——
+            Container(
+              width: 84,
+              height: 84,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: _accent,
+                boxShadow: [
+                  BoxShadow(
+                    color: _accent.withOpacity(0.45),
+                    blurRadius: 36,
+                    spreadRadius: 4,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
+              ),
+              child: const Icon(CupertinoIcons.arrow_down,
+                  color: Colors.white, size: 40),
+            ),
             const SizedBox(height: 24),
-            // —— 标题 ——
+            // —— 主标题 ——
             Text('Orbix',
                 style: TextStyle(
-                    fontSize: 32,
-                    fontWeight: FontWeight.w800,
+                    fontSize: 40,
+                    fontWeight: FontWeight.w900,
                     color: AppColors.of(AppColors.label),
                     letterSpacing: -0.5)),
             const SizedBox(height: 6),
-            // —— 提示文本 ——
+            // —— 副标题 ——
+            Text('qBittorrent 客户端',
+                style: TextStyle(
+                    fontSize: 14,
+                    color: AppColors.of(AppColors.secondaryLabel),
+                    letterSpacing: 0.5)),
+            const SizedBox(height: 40),
+            // —— 列表引导语 ——
             Text('选择一个服务器连接',
                 style: TextStyle(
-                    fontSize: 13, color: AppColors.of(AppColors.secondaryLabel))),
-            const SizedBox(height: 24),
+                    fontSize: 13, color: AppColors.of(AppColors.placeholder))),
+            const SizedBox(height: 16),
             // —— 列表 ——
             Expanded(
               child: _loading
