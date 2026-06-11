@@ -6,6 +6,7 @@ import 'package:get/get.dart';
 
 import '../services/qbit_api.dart';
 import '../theme/app_colors.dart';
+import '../widgets/connecting_dialog.dart';
 import 'login_screen.dart';
 import 'main_screen.dart';
 import 'server_management_screen.dart';
@@ -50,7 +51,7 @@ class _ServerSelectionPageState extends State<ServerSelectionPage> {
     final api = QBitApi();
     api.setServer(s);
 
-    _showLoadingDialog();
+    showConnectingDialog(context);
     // 同时等待真实登录与一个最小展示时长，避免遮罩一闪而过
     final results = await Future.wait([
       api.connect(),
@@ -117,32 +118,6 @@ class _ServerSelectionPageState extends State<ServerSelectionPage> {
     }
   }
 
-  void _showLoadingDialog() {
-    showCupertinoDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => Center(
-        child: Container(
-          width: 120,
-          height: 120,
-          decoration: BoxDecoration(
-            color: AppColors.of(AppColors.card),
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const CupertinoActivityIndicator(radius: 16),
-              const SizedBox(height: 14),
-              Text('连接中...',
-                  style: TextStyle(
-                      fontSize: 13, color: AppColors.of(AppColors.secondaryLabel))),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 
   void _openManagement() {
     Navigator.of(context)
@@ -154,6 +129,7 @@ class _ServerSelectionPageState extends State<ServerSelectionPage> {
 
   @override
   Widget build(BuildContext context) {
+    AppColors.watch(context);
     return Scaffold(
       backgroundColor: AppColors.of(AppColors.plainBg),
       body: SafeArea(

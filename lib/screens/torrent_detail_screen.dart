@@ -208,6 +208,7 @@ class _TorrentDetailScreenState extends State<TorrentDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    AppColors.watch(context);
     final state = (_t['state'] ?? '').toString();
     final info = _parseState(state);
     final Color themeColor = info['color'];

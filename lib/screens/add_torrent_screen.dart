@@ -145,6 +145,7 @@ class _AddTorrentScreenState extends State<AddTorrentScreen> {
 
   @override
   Widget build(BuildContext context) {
+    AppColors.watch(context);
     return Scaffold(
       backgroundColor: _bgColor,
       body: SafeArea(
