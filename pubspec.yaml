@@ -1,7 +1,7 @@
 name: orbix
 description: "A premium qBittorrent client for iOS."
 publish_to: 'none'
-version: 1.0.2+3
+version: 1.0.3+4
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -18,7 +18,9 @@ dependencies:
   file_picker: ^8.1.2        # 选择本地 .torrent 文件上传
   flutter_slidable: ^3.1.1   # 服务器列表左滑操作（连接/编辑/删除）
   package_info_plus: ^8.0.0  # 读取当前 app 版本号，用于更新检测
-  url_launcher: ^6.3.0       # 唤起 TrollStore 安装 scheme / 打开 release 页
+  url_launcher: ^6.3.0       # 打开 release 页 / ipa 直链（兜底）
+  share_plus: ^10.1.1        # 下载完 ipa 后唤起 iOS 原生分享面板 → 拷贝到 TrollStore
+  path_provider: ^2.1.4      # 临时目录，存放下载的 ipa
 
 dev_dependencies:
   flutter_test:

@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:package_info_plus/package_info_plus.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:dio/dio.dart';
+import 'package:share_plus/share_plus.dart';
 import '../services/qbit_api.dart';
 import '../services/update_service.dart';
 import 'add_torrent_screen.dart';
@@ -682,20 +684,100 @@ class _ServerSettingsPageState extends State<ServerSettingsPage> {
     }
   }
 
-  // 交给 TrollStore 下载并安装；失败兜底为打开 release 网页。
+  // App 内下载 ipa（带进度）→ 完成后唤起 iOS 原生分享面板，
+  // 由用户选「拷贝到 TrollStore」完成安装。全程不依赖 apple-magnifier scheme。
   Future<void> _install(AppRelease rel) async {
-    final ts = Uri.parse(UpdateService.trollStoreInstallUrl(rel.ipaUrl));
-    try {
-      if (await launchUrl(ts, mode: LaunchMode.externalApplication)) return;
-    } catch (_) {}
-    try {
-      await launchUrl(Uri.parse(rel.htmlUrl),
-          mode: LaunchMode.externalApplication);
-    } catch (_) {
-      if (mounted) {
-        Toast.show(context, '无法唤起 TrollStore 安装', type: ToastType.error);
+    final progress = ValueNotifier<double>(0);
+    final cancelToken = CancelToken();
+    var dialogOpen = true;
+
+    void closeDialog() {
+      if (dialogOpen && mounted) {
+        dialogOpen = false;
+        Navigator.of(context, rootNavigator: true).pop();
       }
     }
+
+    showCupertinoDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => CupertinoAlertDialog(
+        title: const Text('正在下载更新'),
+        content: Padding(
+          padding: const EdgeInsets.only(top: 14),
+          child: ValueListenableBuilder<double>(
+            valueListenable: progress,
+            builder: (_, p, __) => Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(3),
+                  child: SizedBox(
+                    height: 5,
+                    child: Stack(children: [
+                      Container(color: AppColors.of(AppColors.separator)),
+                      FractionallySizedBox(
+                        alignment: Alignment.centerLeft,
+                        widthFactor: p.clamp(0.0, 1.0),
+                        child: Container(
+                            color: AppColors.accent.resolveFrom(ctx)),
+                      ),
+                    ]),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text('${(p * 100).toStringAsFixed(0)}%',
+                    style: AppTypography.subtitle()),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          CupertinoDialogAction(
+            isDestructiveAction: true,
+            onPressed: () => cancelToken.cancel('cancelled'),
+            child: const Text('取消'),
+          ),
+        ],
+      ),
+    );
+
+    try {
+      final path = await UpdateService.instance.downloadIpa(
+        rel,
+        cancelToken: cancelToken,
+        onProgress: (r, t) {
+          if (t > 0) progress.value = r / t;
+        },
+      );
+      closeDialog();
+      if (!mounted) return;
+      // iPad 上分享面板是 popover，需锚点；iPhone 上忽略。
+      final box = context.findRenderObject() as RenderBox?;
+      final origin = box != null
+          ? box.localToGlobal(Offset.zero) & box.size
+          : null;
+      await Share.shareXFiles(
+        [XFile(path, name: 'Orbix-${rel.tag}.ipa')],
+        subject: 'Orbix ${rel.tag}',
+        sharePositionOrigin: origin,
+      );
+    } on DioException catch (e) {
+      closeDialog();
+      if (CancelToken.isCancel(e)) return; // 用户主动取消，静默
+      if (mounted) {
+        Toast.show(context, '下载失败，请检查网络', type: ToastType.error);
+      }
+    } catch (_) {
+      closeDialog();
+      if (mounted) Toast.show(context, '下载失败', type: ToastType.error);
+    }
+  }
+
+  // 兜底：复制 .ipa 直链，便于手动用浏览器 / TrollStore 处理。
+  Future<void> _copyIpaLink(AppRelease rel) async {
+    await Clipboard.setData(ClipboardData(text: rel.ipaUrl));
+    if (mounted) Toast.show(context, '下载链接已复制', type: ToastType.success);
   }
 
   String _fmtMB(int bytes) =>
@@ -723,7 +805,16 @@ class _ServerSettingsPageState extends State<ServerSettingsPage> {
               Navigator.pop(ctx);
               _install(rel);
             },
-            child: Text(size.isEmpty ? '下载并安装' : '下载并安装 · $size'),
+            child: Text(size.isEmpty
+                ? '下载并安装'
+                : '下载并安装 · $size'),
+          ),
+          CupertinoActionSheetAction(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _copyIpaLink(rel);
+            },
+            child: const Text('复制下载链接'),
           ),
         ],
         cancelButton: CupertinoActionSheetAction(
