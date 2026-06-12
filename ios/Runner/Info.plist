@@ -45,5 +45,10 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<!-- TrollStore 劫持的系统 scheme：用于 install?url= 唤起安装 -->
+		<string>apple-magnifier</string>
+	</array>
 </dict>
 </plist>

@@ -3,6 +3,7 @@ import 'package:flutter/cupertino.dart';
 
 import '../services/qbit_api.dart';
 import '../theme/app_colors.dart';
+import '../theme/app_motion.dart';
 import '../theme/app_typography.dart';
 import '../widgets/skeleton.dart';
 
@@ -178,10 +179,19 @@ class _StatsScreenState extends State<StatsScreen> {
   Widget _buildContent() {
     final dl = _g('dl_info_speed');
     final up = _g('up_info_speed');
+    // 无上传/下载时收起 Hero「当前总速」，让页面更干净；有速时平滑展开。
+    final active = (dl + up) > 0;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _buildHero(dl, up),
+        AnimatedSize(
+          duration: AppMotion.medium,
+          curve: AppMotion.standard,
+          alignment: Alignment.topCenter,
+          child: active
+              ? _buildHero(dl, up)
+              : const SizedBox(width: double.infinity),
+        ),
         _buildTransferSection(),
         _buildConnectionSection(),
         _buildDiskSection(),
