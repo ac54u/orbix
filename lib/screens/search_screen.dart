@@ -316,6 +316,8 @@ class _SearchScreenState extends State<SearchScreen> {
   Widget _buildLocalList() {
     final list = _localResults;
     return CupertinoListSection.insetGrouped(
+      backgroundColor: AppColors.of(AppColors.groupedBg),
+      decoration: BoxDecoration(color: AppColors.of(AppColors.card)),
       children: list.map((t) {
         final tt = t as Map;
         final info = _stateInfo((tt['state'] ?? '').toString());
@@ -410,6 +412,8 @@ class _SearchScreenState extends State<SearchScreen> {
 
   Widget _buildOnlineList() {
     return CupertinoListSection.insetGrouped(
+      backgroundColor: AppColors.of(AppColors.groupedBg),
+      decoration: BoxDecoration(color: AppColors.of(AppColors.card)),
       children:
           _results.map((r) => _buildOnlineTile(r as Map)).toList(),
     );
@@ -507,6 +511,8 @@ class _SearchScreenState extends State<SearchScreen> {
   // —— 加载态：骨架屏 ——
   Widget _buildLocalSkeleton() {
     return CupertinoListSection.insetGrouped(
+      backgroundColor: AppColors.of(AppColors.groupedBg),
+      decoration: BoxDecoration(color: AppColors.of(AppColors.card)),
       children: List.generate(
         6,
         (_) => const CupertinoListTile(
@@ -541,6 +547,8 @@ class _SearchScreenState extends State<SearchScreen> {
           ),
         ),
         CupertinoListSection.insetGrouped(
+          backgroundColor: AppColors.of(AppColors.groupedBg),
+          decoration: BoxDecoration(color: AppColors.of(AppColors.card)),
           children: List.generate(
             5,
             (_) => const CupertinoListTile(

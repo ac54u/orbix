@@ -84,6 +84,8 @@ class WelcomeScreen extends StatelessWidget {
   // —— 三行功能介绍：单 inset grouped section，无独立浮卡 ——
   Widget _buildFeatures() {
     return CupertinoListSection.insetGrouped(
+      backgroundColor: AppColors.of(AppColors.groupedBg),
+      decoration: BoxDecoration(color: AppColors.of(AppColors.card)),
       children: [
         _featureTile(
           CupertinoIcons.plus_app_fill,

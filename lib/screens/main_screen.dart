@@ -804,6 +804,8 @@ class _ServerSettingsPageState extends State<ServerSettingsPage> {
     final s = _active;
     if (s == null) {
       return CupertinoListSection.insetGrouped(
+        backgroundColor: AppColors.of(AppColors.groupedBg),
+        decoration: BoxDecoration(color: AppColors.of(AppColors.card)),
         header: Text('服务器', style: AppTypography.sectionHeader()),
         children: [
           CupertinoListTile.notched(
@@ -824,6 +826,8 @@ class _ServerSettingsPageState extends State<ServerSettingsPage> {
     final secure = s.url.contains('https') || s.port == '443';
 
     return CupertinoListSection.insetGrouped(
+      backgroundColor: AppColors.of(AppColors.groupedBg),
+      decoration: BoxDecoration(color: AppColors.of(AppColors.card)),
       header: Text('服务器', style: AppTypography.sectionHeader()),
       children: [
         // 服务器名 = 入口标题，点击进入管理页
@@ -878,6 +882,8 @@ class _ServerSettingsPageState extends State<ServerSettingsPage> {
   // 加载态：与正式 section 同构的骨架屏，避免「先小后大」的布局跳动。
   Widget _buildServerSectionSkeleton() {
     return CupertinoListSection.insetGrouped(
+      backgroundColor: AppColors.of(AppColors.groupedBg),
+      decoration: BoxDecoration(color: AppColors.of(AppColors.card)),
       header: Text('服务器', style: AppTypography.sectionHeader()),
       children: const [
         CupertinoListTile(

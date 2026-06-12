@@ -457,6 +457,8 @@ class _TorrentDetailScreenState extends State<TorrentDetailScreen> {
     final peers = _t['num_leechs'] ?? _props['peers'] ?? 0;
 
     return CupertinoListSection.insetGrouped(
+      backgroundColor: AppColors.of(AppColors.groupedBg),
+      decoration: BoxDecoration(color: AppColors.of(AppColors.card)),
       header: Text('传输', style: AppTypography.sectionHeader()),
       children: [
         _tile('下载速度', _fmtSpeed(dl)),
@@ -484,6 +486,8 @@ class _TorrentDetailScreenState extends State<TorrentDetailScreen> {
     final seedingTime = (_props['seeding_time'] ?? 0) as int;
 
     return CupertinoListSection.insetGrouped(
+      backgroundColor: AppColors.of(AppColors.groupedBg),
+      decoration: BoxDecoration(color: AppColors.of(AppColors.card)),
       header: Text('信息', style: AppTypography.sectionHeader()),
       children: [
         _tile('总大小', _fmtSize(size as num?)),

@@ -405,6 +405,8 @@ class _LoginScreenState extends State<LoginScreen>
       children: [
         // 1. 服务器信息
         CupertinoFormSection.insetGrouped(
+          backgroundColor: AppColors.of(AppColors.groupedBg),
+          decoration: BoxDecoration(color: AppColors.of(AppColors.card)),
           header: Text('服务器信息', style: AppTypography.sectionHeader()),
           children: [
             _textRow(_nameController, '名称（可选）', CupertinoIcons.tag),
@@ -418,6 +420,8 @@ class _LoginScreenState extends State<LoginScreen>
 
         // 2. 认证
         CupertinoFormSection.insetGrouped(
+          backgroundColor: AppColors.of(AppColors.groupedBg),
+          decoration: BoxDecoration(color: AppColors.of(AppColors.card)),
           header: Text('认证', style: AppTypography.sectionHeader()),
           children: [
             _textRow(_usernameController, '用户名', CupertinoIcons.person),
@@ -427,6 +431,8 @@ class _LoginScreenState extends State<LoginScreen>
 
         // 3. HTTPS
         CupertinoFormSection.insetGrouped(
+          backgroundColor: AppColors.of(AppColors.groupedBg),
+          decoration: BoxDecoration(color: AppColors.of(AppColors.card)),
           children: [
             CupertinoFormRow(
               prefix: Row(
@@ -452,6 +458,8 @@ class _LoginScreenState extends State<LoginScreen>
 
         // 4. 测试连接
         CupertinoFormSection.insetGrouped(
+          backgroundColor: AppColors.of(AppColors.groupedBg),
+          decoration: BoxDecoration(color: AppColors.of(AppColors.card)),
           footer: _buildTestFooter(),
           children: [_buildTestRow()],
         ),

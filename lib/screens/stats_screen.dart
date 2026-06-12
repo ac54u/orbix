@@ -235,6 +235,8 @@ class _StatsScreenState extends State<StatsScreen> {
 
   Widget _buildTransferSection() {
     return CupertinoListSection.insetGrouped(
+      backgroundColor: AppColors.of(AppColors.groupedBg),
+      decoration: BoxDecoration(color: AppColors.of(AppColors.card)),
       header: Text('传输量', style: AppTypography.sectionHeader()),
       children: [
         _tile('本次会话 · 下载', _fmtSize(_g('dl_info_data'))),
@@ -250,6 +252,8 @@ class _StatsScreenState extends State<StatsScreen> {
 
   Widget _buildConnectionSection() {
     return CupertinoListSection.insetGrouped(
+      backgroundColor: AppColors.of(AppColors.groupedBg),
+      decoration: BoxDecoration(color: AppColors.of(AppColors.card)),
       header: Text('连接', style: AppTypography.sectionHeader()),
       children: [
         _tile('连接状态', _connText, valueColor: _connColor),
@@ -272,6 +276,8 @@ class _StatsScreenState extends State<StatsScreen> {
 
   Widget _buildDiskSection() {
     return CupertinoListSection.insetGrouped(
+      backgroundColor: AppColors.of(AppColors.groupedBg),
+      decoration: BoxDecoration(color: AppColors.of(AppColors.card)),
       header: Text('磁盘', style: AppTypography.sectionHeader()),
       children: [
         _tile('默认保存路径剩余', _fmtSize(_g('free_space_on_disk')),
@@ -296,6 +302,8 @@ class _StatsScreenState extends State<StatsScreen> {
           CupertinoIcons.exclamationmark_circle_fill],
     ];
     return CupertinoListSection.insetGrouped(
+      backgroundColor: AppColors.of(AppColors.groupedBg),
+      decoration: BoxDecoration(color: AppColors.of(AppColors.card)),
       header: Text('任务概览', style: AppTypography.sectionHeader()),
       children: items.map((it) {
         final label = it[0] as String;
@@ -374,6 +382,8 @@ class _StatsScreenState extends State<StatsScreen> {
 
   Widget _sectionSkeleton(int rowCount, {bool withLeading = false}) {
     return CupertinoListSection.insetGrouped(
+      backgroundColor: AppColors.of(AppColors.groupedBg),
+      decoration: BoxDecoration(color: AppColors.of(AppColors.card)),
       header: const SkeletonBar(width: 60, height: 12),
       children: List.generate(
         rowCount,
