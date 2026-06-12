@@ -1,7 +1,9 @@
 import 'dart:convert';
+
+import 'package:cookie_jar/cookie_jar.dart';
 import 'package:dio/dio.dart';
 import 'package:dio_cookie_manager/dio_cookie_manager.dart';
-import 'package:cookie_jar/cookie_jar.dart';
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ServerConfig {
@@ -497,7 +499,7 @@ class QBitApi {
       }
       return null;
     } on DioException catch (e) {
-      print("添加任务失败: $e");
+      debugPrint("添加任务失败: $e");
       // 字节已发出、服务器可能已同步处理，只是回执超时。以列表核对：
       // 确实新增→成功；无法核对（连服务器都不通）→乐观当成功，避免误报；
       // 能核对且没新增→服务器确实没收到，照实报错。
@@ -524,7 +526,7 @@ class QBitApi {
       }
       return r.statusCode == 200;
     } on DioException catch (e) {
-      print("操作失败 $path: $e");
+      debugPrint("操作失败 $path: $e");
       return false;
     }
   }
@@ -542,7 +544,7 @@ class QBitApi {
       }
       return r.statusCode == 200 ? r : null;
     } on DioException catch (e) {
-      print("请求失败 $path: $e");
+      debugPrint("请求失败 $path: $e");
       return null;
     }
   }
@@ -562,7 +564,7 @@ class QBitApi {
       }
       return (r.statusCode != null && r.statusCode! < 300) ? r : null;
     } on DioException catch (e) {
-      print("请求失败 $path: $e");
+      debugPrint("请求失败 $path: $e");
       return null;
     }
   }

@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../services/qbit_api.dart';
 import 'add_torrent_screen.dart';
@@ -9,6 +8,10 @@ import 'server_management_screen.dart';
 import 'stats_screen.dart';
 import 'search_screen.dart';
 import '../theme/app_colors.dart';
+import '../theme/app_motion.dart';
+import '../theme/app_typography.dart';
+import '../widgets/skeleton.dart';
+import '../widgets/toast.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -93,11 +96,11 @@ class _MainScreenState extends State<MainScreen> {
 
   // 将 qBittorrent 状态码转为 UI 文本/颜色/图标（兼容新版 stopped* / 旧版 paused*）
   Map<String, dynamic> _parseState(String state) {
-    const blue = Color(0xFF007AFF);
-    const green = Color(0xFF34C759);
-    const grey = Color(0xFF8E8E93);
-    const orange = Color(0xFFFF9500);
-    const red = Color(0xFFFF3B30);
+    final blue = CupertinoColors.systemBlue.resolveFrom(context);
+    final green = CupertinoColors.systemGreen.resolveFrom(context);
+    final grey = AppColors.of(AppColors.secondaryLabel);
+    final orange = CupertinoColors.systemOrange.resolveFrom(context);
+    final red = CupertinoColors.systemRed.resolveFrom(context);
     switch (state) {
       case 'downloading':
       case 'metaDL':
@@ -241,10 +244,10 @@ class _MainScreenState extends State<MainScreen> {
           child: const Text('删除'),
         ),
       ],
-      // 关键：浮层中补一层透明 Material，提供完整 DefaultTextStyle，
-      // 否则长按放大时卡片文字会出现黄色下划线（缺省文本样式标志）。
-      child: Material(
-        type: MaterialType.transparency,
+      // 浮层中补 DefaultTextStyle 兜底，避免长按放大时出现「缺省样式」
+      // 黄色下划线；新版行内 Text 都显式带样式，这层是安全网。
+      child: DefaultTextStyle(
+        style: AppTypography.body(),
         child: card,
       ),
     );
@@ -307,26 +310,20 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   void _toast(String msg, {required bool ok}) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(msg),
-        backgroundColor: ok ? const Color(0xFF34C759) : const Color(0xFFFF3B30),
-        behavior: SnackBarBehavior.floating,
-        duration: const Duration(milliseconds: 1400),
-      ),
-    );
+    Toast.show(context, msg, type: ok ? ToastType.success : ToastType.error);
   }
 
   @override
   Widget build(BuildContext context) {
     AppColors.watch(context);
-    return Scaffold(
+    return CupertinoPageScaffold(
       backgroundColor: AppColors.of(AppColors.mainBg),
-      body: SafeArea(
-        child: Column(
-          children: [
-            // 按底部 tab 切换页面（统计/搜索/设置为占位）
-            Expanded(
+      child: Column(
+        children: [
+          // 按底部 tab 切换页面
+          Expanded(
+            child: SafeArea(
+              bottom: false, // 底部留给 _buildBottomNav 自己的 SafeArea
               child: IndexedStack(
                 index: _currentIndex,
                 children: [
@@ -343,74 +340,64 @@ class _MainScreenState extends State<MainScreen> {
                 ],
               ),
             ),
-            Container(height: 1, color: AppColors.of(AppColors.separator)),
-          ],
-        ),
+          ),
+          _buildBottomNav(),
+        ],
       ),
-      bottomNavigationBar: _buildBottomNav(),
     );
   }
 
-  // 各页统一的大标题样式（颜色随明暗动态解析，故为 getter 而非 const）
-  TextStyle get _pageTitleStyle => TextStyle(
-        fontSize: 34,
-        fontWeight: FontWeight.w800,
-        color: AppColors.of(AppColors.label),
-        letterSpacing: -0.5,
-      );
-
-  // 种子主页面：顶部（筛选/添加 + 标题 + 速度总览）固定，仅列表滚动
+  // 种子主页面：标题 + 添加按钮 + 筛选 + 行内速度 + 列表（Cupertino sliver refresh）。
   Widget _buildTorrentPage() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // —— 固定头部 ——
+        // —— 顶部：标题 + 添加按钮 ——
         Padding(
-          padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          padding: const EdgeInsets.fromLTRB(20, 10, 8, 0),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              // 标题 + 添加
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text("种子", style: _pageTitleStyle),
-                  GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: () async {
-                      await Get.to(() => const AddTorrentScreen());
-                      _fetchData(); // 返回后立即刷新
-                    },
-                    child: _buildCircleButton(CupertinoIcons.add, isOutlined: false),
-                  ),
-                ],
+              Text('种子', style: AppTypography.largeTitle()),
+              CupertinoButton(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                onPressed: () async {
+                  await Get.to(() => const AddTorrentScreen());
+                  _fetchData();
+                },
+                child: const Icon(
+                  CupertinoIcons.add,
+                  size: 28,
+                  color: CupertinoColors.systemBlue,
+                ),
               ),
-              const SizedBox(height: 16),
-              _buildFilterBar(),
-              // 速度卡：有速度才出现（自带顶部间距），空闲时整体收起
-              _buildSpeedSummary(),
-              const SizedBox(height: 16),
             ],
           ),
         ),
-        // —— 可滚动列表 ——
+        // —— 筛选下划线 tabs ——
+        _buildFilterBar(),
+        // —— 行内全局速度（仅活动时显示） ——
+        _buildSpeedInline(),
+        const SizedBox(height: 8),
+        // —— 列表 ——
         Expanded(
-          child: RefreshIndicator(
-            onRefresh: _fetchData,
-            child: ListView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-              children: [
-                _buildDynamicTorrentList(),
-              ],
+          child: CustomScrollView(
+            physics: const BouncingScrollPhysics(
+              parent: AlwaysScrollableScrollPhysics(),
             ),
+            slivers: [
+              CupertinoSliverRefreshControl(onRefresh: _fetchData),
+              SliverToBoxAdapter(child: _buildDynamicTorrentList()),
+              const SliverToBoxAdapter(child: SizedBox(height: 24)),
+            ],
           ),
         ),
       ],
     );
   }
 
-  // 顶部横向胶囊筛选栏：点一下即切换，选中蓝底白字
+  // 筛选下划线 tabs：选中态文本加粗 + 底部 systemBlue 极细线；无任何色块底。
   Widget _buildFilterBar() {
     const options = [
       ['all', '全部'],
@@ -421,12 +408,13 @@ class _MainScreenState extends State<MainScreen> {
       ['completed', '已完成'],
     ];
     return SizedBox(
-      height: 34,
+      height: 36,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         physics: const BouncingScrollPhysics(),
+        padding: const EdgeInsets.symmetric(horizontal: 20),
         itemCount: options.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        separatorBuilder: (_, __) => const SizedBox(width: 18),
         itemBuilder: (_, i) {
           final key = options[i][0];
           final label = options[i][1];
@@ -434,29 +422,36 @@ class _MainScreenState extends State<MainScreen> {
           return GestureDetector(
             behavior: HitTestBehavior.opaque,
             onTap: () => setState(() => _filter = key),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 180),
-              curve: Curves.easeOut,
-              alignment: Alignment.center,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              decoration: BoxDecoration(
-                color: selected ? const Color(0xFF007AFF) : AppColors.of(AppColors.card),
-                borderRadius: BorderRadius.circular(17),
-                boxShadow: [
-                  BoxShadow(
-                      color: Colors.black.withOpacity(0.03),
-                      blurRadius: 6,
-                      offset: const Offset(0, 2)),
-                ],
-              ),
-              child: Text(
-                label,
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-                  color: selected ? Colors.white : AppColors.of(AppColors.secondaryLabel),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    label,
+                    style: AppTypography.subtitle(
+                      color: selected
+                          ? AppColors.of(AppColors.label)
+                          : AppColors.of(AppColors.secondaryLabel),
+                    ).copyWith(
+                      fontWeight:
+                          selected ? FontWeight.w600 : FontWeight.w400,
+                      letterSpacing: -0.1,
+                    ),
+                  ),
                 ),
-              ),
+                const SizedBox(height: 6),
+                AnimatedContainer(
+                  duration: AppMotion.fast,
+                  curve: AppMotion.standard,
+                  height: 1.5,
+                  width: selected ? 24 : 0,
+                  decoration: const BoxDecoration(
+                    color: CupertinoColors.systemBlue,
+                    borderRadius: BorderRadius.all(Radius.circular(1)),
+                  ),
+                ),
+              ],
             ),
           );
         },
@@ -464,125 +459,46 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
-  Widget _buildCircleButton(IconData icon, {required bool isOutlined}) {
-    return Container(
-      width: 40,
-      height: 40,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: isOutlined ? Colors.transparent : const Color(0xFF007AFF),
-        border: isOutlined ? Border.all(color: const Color(0xFF007AFF), width: 1.5) : null,
-      ),
-      child: Icon(icon, color: isOutlined ? const Color(0xFF007AFF) : Colors.white, size: 22),
-    );
-  }
-
-  // 全局速度总览：有速度才显示对应卡片，空闲时整体平滑收起
-  Widget _buildSpeedSummary() {
-    final showUp = _totalUpSpeed > 0;
+  // 全局速度：行内细文字，空闲时整段折叠。
+  Widget _buildSpeedInline() {
     final showDl = _totalDlSpeed > 0;
-    final show = showUp || showDl;
-
+    final showUp = _totalUpSpeed > 0;
+    final show = showDl || showUp;
     return AnimatedSize(
-      duration: const Duration(milliseconds: 260),
-      curve: Curves.easeOut,
+      duration: AppMotion.medium,
+      curve: AppMotion.standard,
       alignment: Alignment.topCenter,
       child: !show
-          ? const SizedBox(width: double.infinity) // 收起到 0 高度
+          ? const SizedBox(width: double.infinity)
           : Padding(
-              padding: const EdgeInsets.only(top: 16),
+              padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
               child: Row(
                 children: [
-                  if (showUp)
-                    Expanded(
-                      child: _buildSpeedCard(
-                        title: "上传",
-                        speedStr: _formatSpeed(_totalUpSpeed),
-                        icon: CupertinoIcons.arrow_up_circle_fill,
-                        color: const Color(0xFF007AFF),
-                        gradientColors: [
-                          const Color(0xFF007AFF),
-                          const Color(0xFF007AFF).withOpacity(0.1)
-                        ],
-                      ),
-                    ),
-                  if (showUp && showDl) const SizedBox(width: 16),
-                  if (showDl)
-                    Expanded(
-                      child: _buildSpeedCard(
-                        title: "下载",
-                        speedStr: _formatSpeed(_totalDlSpeed),
-                        icon: CupertinoIcons.arrow_down_circle_fill,
-                        color: const Color(0xFF5AC8FA),
-                        gradientColors: [
-                          const Color(0xFF5AC8FA),
-                          const Color(0xFF5AC8FA).withOpacity(0.1)
-                        ],
-                      ),
-                    ),
+                  if (showDl) ...[
+                    Icon(CupertinoIcons.arrow_down,
+                        size: 12,
+                        color: AppColors.of(AppColors.secondaryLabel)),
+                    const SizedBox(width: 4),
+                    Text(_formatSpeed(_totalDlSpeed),
+                        style: AppTypography.caption()),
+                  ],
+                  if (showDl && showUp) const SizedBox(width: 18),
+                  if (showUp) ...[
+                    Icon(CupertinoIcons.arrow_up,
+                        size: 12,
+                        color: AppColors.of(AppColors.secondaryLabel)),
+                    const SizedBox(width: 4),
+                    Text(_formatSpeed(_totalUpSpeed),
+                        style: AppTypography.caption()),
+                  ],
                 ],
               ),
             ),
     );
   }
 
-  Widget _buildSpeedCard({
-    required String title,
-    required String speedStr,
-    required IconData icon,
-    required Color color,
-    required List<Color> gradientColors,
-  }) {
-    final parts = speedStr.split(' ');
-    final number = parts[0];
-    final unit = parts.length > 1 ? parts[1] : "";
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.of(AppColors.card),
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10, offset: const Offset(0, 4)),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icon, color: color, size: 18),
-              const SizedBox(width: 6),
-              Text(title, style: const TextStyle(fontSize: 14, color: Color(0xFF8E8E93))),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic,
-            children: [
-              Text(number, style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: color)),
-              const SizedBox(width: 4),
-              Text(unit, style: const TextStyle(fontSize: 12, color: Color(0xFF8E8E93))),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Container(
-            height: 4,
-            width: double.infinity,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(2),
-              gradient: LinearGradient(colors: gradientColors, begin: Alignment.centerLeft, end: Alignment.centerRight),
-            ),
-          )
-        ],
-      ),
-    );
-  }
-
-  // —— 动态渲染服务器返回的种子列表 ——
+  // 列表：整组放入单个 inset grouped 卡，行间用 2pt 进度线划分。
   Widget _buildDynamicTorrentList() {
-    // 按添加时间倒序：最新添加的排在最前
     final list = _torrents.where(_matchesFilter).toList()
       ..sort((a, b) => ((b['added_on'] ?? 0) as int)
           .compareTo((a['added_on'] ?? 0) as int));
@@ -590,203 +506,215 @@ class _MainScreenState extends State<MainScreen> {
     if (list.isEmpty) {
       final String emptyText;
       if (!_loaded) {
-        emptyText = "加载中…";
+        emptyText = '加载中…';
       } else if (_torrents.isEmpty) {
-        emptyText = "暂无种子任务";
+        emptyText = '暂无种子任务';
       } else {
-        emptyText = "「${_filterLabel(_filter)}」下暂无任务";
+        emptyText = '「${_filterLabel(_filter)}」下暂无任务';
       }
       return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 40),
+        padding: const EdgeInsets.symmetric(vertical: 80),
         child: Center(
           child: Text(
             emptyText,
-            style: const TextStyle(color: Colors.grey, fontSize: 16),
+            style: AppTypography.subtitle(
+                color: AppColors.of(AppColors.tertiaryLabel)),
           ),
         ),
       );
     }
 
-    return Column(
-      children: list.map((t) {
-        final name = t['name'] ?? "未知任务";
-        final hash = (t['hash'] ?? "").toString();
-        final rawState = (t['state'] ?? "").toString();
-        final totalSize = (t['total_size'] ?? 0) as int;
-        final progress = (t['progress'] ?? 0.0).toDouble();
-        final stateInfo = _parseState(rawState);
-        final dlspeed = (t['dlspeed'] ?? 0) as int;
-        final upspeed = (t['upspeed'] ?? 0) as int;
-        final ratio = (t['ratio'] ?? 0.0).toDouble();
-        final eta = (t['eta'] ?? 8640000) as int;
-
-        final card = _buildTorrentCard(
-          title: name,
-          size: _formatSize(totalSize),
-          progress: progress,
-          progressText: "${(progress * 100).toStringAsFixed(1)}%",
-          statusText: stateInfo["text"],
-          themeColor: stateInfo["color"],
-          statusIcon: stateInfo["icon"],
-          downSpeed: _formatSpeed(dlspeed),
-          upSpeed: _formatSpeed(upspeed),
-          ratio: ratio.toStringAsFixed(2),
-          eta: _formatEta(eta),
-        );
-
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 16.0),
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            // 点按查看详情；长按仍由内部 CupertinoContextMenu 处理
-            onTap: hash.isEmpty ? null : () => _openDetail(t),
-            child: hash.isEmpty
-                ? card
-                : _wrapWithContextMenu(
-                    hash: hash, name: name, state: rawState, card: card),
-          ),
-        );
-      }).toList(),
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      decoration: BoxDecoration(
+        color: AppColors.of(AppColors.card),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      clipBehavior: Clip.hardEdge,
+      child: Column(
+        children:
+            List.generate(list.length, (i) => _buildTorrentRow(list[i])),
+      ),
     );
   }
 
-  Widget _buildTorrentCard({
-    required String title,
-    required String size,
-    required double progress,
-    required String progressText,
-    required String statusText,
-    required Color themeColor,
-    required IconData statusIcon,
-    required String downSpeed,
-    required String upSpeed,
-    required String ratio,
-    required String eta,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.of(AppColors.card),
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10, offset: const Offset(0, 4)),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+  // 单行：状态图标 + 标题/大小 + 元信息一行 + 底部 2pt 极细进度线。
+  Widget _buildTorrentRow(dynamic t) {
+    final name = (t['name'] ?? '未知任务') as String;
+    final hash = (t['hash'] ?? '').toString();
+    final rawState = (t['state'] ?? '').toString();
+    final totalSize = (t['total_size'] ?? 0) as int;
+    final progress = ((t['progress'] ?? 0.0) as num).toDouble();
+    final stateInfo = _parseState(rawState);
+    final dlspeed = (t['dlspeed'] ?? 0) as int;
+    final upspeed = (t['upspeed'] ?? 0) as int;
+    final eta = (t['eta'] ?? 8640000) as int;
+
+    final themeColor = stateInfo['color'] as Color;
+    final statusText = stateInfo['text'] as String;
+    final statusIcon = stateInfo['icon'] as IconData;
+
+    // —— meta：状态 · ↓速 · ↑速 · 百分比 · ETA，按需出现 ——
+    final dotStyle =
+        AppTypography.caption(color: AppColors.of(AppColors.tertiaryLabel));
+    final spans = <InlineSpan>[];
+    void addSpan(String text, {Color? color}) {
+      if (spans.isNotEmpty) {
+        spans.add(TextSpan(text: '  ·  ', style: dotStyle));
+      }
+      spans.add(TextSpan(
+        text: text,
+        style: AppTypography.caption(color: color),
+      ));
+    }
+
+    addSpan(statusText, color: themeColor);
+    if (dlspeed > 0) addSpan('↓ ${_formatSpeed(dlspeed)}');
+    if (upspeed > 0) addSpan('↑ ${_formatSpeed(upspeed)}');
+    addSpan('${(progress * 100).toStringAsFixed(1)}%');
+    if (eta > 0 && eta < 8640000 && progress < 1.0) {
+      addSpan(_formatEta(eta));
+    }
+
+    final row = Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+          child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(
-                statusIcon,
-                color: themeColor,
-                size: 28,
+              Padding(
+                padding: const EdgeInsets.only(top: 1),
+                child: Icon(statusIcon, color: themeColor, size: 22),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(title,
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: AppColors.of(AppColors.label)),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis),
-                    const SizedBox(height: 4),
-                    Text(size, style: const TextStyle(fontSize: 13, color: Color(0xFF8E8E93))),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(progressText, style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: themeColor)),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(color: themeColor.withOpacity(0.15), borderRadius: BorderRadius.circular(10)),
-                child: Text(statusText, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: themeColor)),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              return Container(
-                height: 6,
-                width: constraints.maxWidth,
-                decoration: BoxDecoration(color: AppColors.of(AppColors.separator), borderRadius: BorderRadius.circular(3)),
-                child: Row(
-                  children: [
-                    Container(
-                      width: constraints.maxWidth * progress.clamp(0.0, 1.0),
-                      decoration: BoxDecoration(color: themeColor, borderRadius: BorderRadius.circular(3)),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            name,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTypography.body().copyWith(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              height: 1.25,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: Text(
+                            _formatSize(totalSize),
+                            style: AppTypography.caption(
+                                color:
+                                    AppColors.of(AppColors.tertiaryLabel)),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text.rich(
+                      TextSpan(children: spans),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ],
                 ),
-              );
-            },
-          ),
-          const SizedBox(height: 16),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              _buildStatItem(CupertinoIcons.arrow_down_circle_fill, downSpeed, const Color(0xFF007AFF)),
-              _buildStatItem(CupertinoIcons.arrow_up_circle_fill, upSpeed, const Color(0xFF34C759)),
-              _buildStatItem(CupertinoIcons.graph_square, ratio, const Color(0xFFFF9500)),
-              _buildStatItem(CupertinoIcons.time, eta, const Color(0xFF8E8E93)),
+              ),
             ],
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStatItem(IconData icon, String text, Color iconColor) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, size: 14, color: iconColor),
-        const SizedBox(width: 4),
-        Text(text, style: TextStyle(fontSize: 12, color: AppColors.of(AppColors.secondaryLabel), fontWeight: FontWeight.w500)),
+        ),
+        // 2pt 极细进度线，贴底；本身充当行间分隔。
+        SizedBox(
+          height: 2,
+          child: Stack(
+            children: [
+              Container(color: AppColors.of(AppColors.separator)),
+              FractionallySizedBox(
+                alignment: Alignment.centerLeft,
+                widthFactor: progress.clamp(0.0, 1.0),
+                child: Container(color: themeColor),
+              ),
+            ],
+          ),
+        ),
       ],
     );
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: hash.isEmpty ? null : () => _openDetail(t),
+      child: hash.isEmpty
+          ? row
+          : _wrapWithContextMenu(
+              hash: hash,
+              name: name,
+              state: rawState,
+              card: row,
+            ),
+    );
   }
 
+  // 底部 Tab：去阴影，仅 0.5pt 顶部细线；选中走 systemBlue。
+  // 自带 SafeArea bottom 以适配 Home Indicator（CupertinoPageScaffold 不会代管）。
   Widget _buildBottomNav() {
-    return Container(
-      padding: const EdgeInsets.only(top: 10, bottom: 20),
+    return DecoratedBox(
       decoration: BoxDecoration(
         color: AppColors.of(AppColors.card),
-        boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, -2))],
+        border: Border(
+          top: BorderSide(
+            color: AppColors.of(AppColors.separator),
+            width: 0.5,
+          ),
+        ),
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
-        children: [
-          _buildNavItem(0, CupertinoIcons.arrow_down_circle_fill, "种子"),
-          _buildNavItem(1, CupertinoIcons.chart_bar_alt_fill, "统计"),
-          _buildNavItem(2, CupertinoIcons.search, "搜索"),
-          _buildNavItem(3, CupertinoIcons.gear_alt, "设置"),
-        ],
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.only(top: 8, bottom: 4),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _buildNavItem(0, CupertinoIcons.arrow_down_circle_fill, '种子'),
+              _buildNavItem(1, CupertinoIcons.chart_bar_alt_fill, '统计'),
+              _buildNavItem(2, CupertinoIcons.search, '搜索'),
+              _buildNavItem(3, CupertinoIcons.gear_alt, '设置'),
+            ],
+          ),
+        ),
       ),
     );
   }
 
   Widget _buildNavItem(int index, IconData icon, String label) {
     final isSelected = _currentIndex == index;
-    final color = isSelected ? const Color(0xFF007AFF) : const Color(0xFF8E8E93);
-
+    final color = isSelected
+        ? CupertinoColors.systemBlue
+        : AppColors.of(AppColors.secondaryLabel);
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: () => setState(() => _currentIndex = index),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, color: color, size: 28),
+          Icon(icon, color: color, size: 26),
           const SizedBox(height: 4),
-          Text(label, style: TextStyle(color: color, fontSize: 11, fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal)),
+          Text(
+            label,
+            style: TextStyle(
+              color: color,
+              fontSize: 10,
+              fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+              letterSpacing: -0.1,
+            ),
+          ),
         ],
       ),
     );
@@ -804,12 +732,8 @@ class ServerSettingsPage extends StatefulWidget {
 }
 
 class _ServerSettingsPageState extends State<ServerSettingsPage> {
-  static const Color _inkMuted = Color(0xFF8E8E93); // 中性灰，明暗皆可读
-  Color get _ink => AppColors.of(AppColors.label); // 主文字，随明暗动态解析
-
-  // 当前活动服务器（用于在设置页摘要展示）
   ServerConfig? _active;
-  String? _version; // qBittorrent 应用版本（异步获取）
+  String? _version;
   bool _loading = true;
 
   @override
@@ -826,7 +750,7 @@ class _ServerSettingsPageState extends State<ServerSettingsPage> {
       _version = null;
       _loading = false;
     });
-    // 版本号异步获取，不阻塞卡片渲染
+    // 版本号异步获取，不阻塞 section 渲染
     if (active != null) {
       final v = await QBitApi().getAppVersion();
       if (!mounted) return;
@@ -837,7 +761,6 @@ class _ServerSettingsPageState extends State<ServerSettingsPage> {
   String _label(ServerConfig s) =>
       s.name.isNotEmpty ? s.name : s.url.replaceFirst(RegExp(r'^https?://'), '');
 
-  // 点击摘要卡片：从右向左滑入「服务器管理」页；返回后刷新摘要。
   Future<void> _openManagement() async {
     await Navigator.of(context).push(
       CupertinoPageRoute(
@@ -855,39 +778,19 @@ class _ServerSettingsPageState extends State<ServerSettingsPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // —— 固定标题 ——
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                '设置',
-                style: TextStyle(
-                  fontSize: 34,
-                  fontWeight: FontWeight.w800,
-                  color: _ink,
-                  letterSpacing: -0.5,
-                ),
-              ),
-            ),
+            child: Text('设置', style: AppTypography.largeTitle()),
           ),
-          // —— 可滚动内容 ——
           Expanded(
             child: ListView(
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+              physics: const BouncingScrollPhysics(
+                parent: AlwaysScrollableScrollPhysics(),
+              ),
               children: [
-                const Padding(
-                  padding: EdgeInsets.only(left: 4, bottom: 8),
-                  child: Text('服务器',
-                      style: TextStyle(fontSize: 13, color: _inkMuted)),
-                ),
-                if (_loading)
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 40),
-                    child: Center(child: CupertinoActivityIndicator()),
-                  )
-                else
-                  _buildSummaryCard(),
+                _loading
+                    ? _buildServerSectionSkeleton()
+                    : _buildServerSection(),
               ],
             ),
           ),
@@ -896,136 +799,103 @@ class _ServerSettingsPageState extends State<ServerSettingsPage> {
     );
   }
 
-  // 摘要卡片：展示当前服务器信息，点击进入「服务器管理」页。
-  Widget _buildSummaryCard() {
+  // 服务器信息：inset grouped section，名称作为入口标题 + 详情三行。
+  Widget _buildServerSection() {
     final s = _active;
-    final card = Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-              color: Colors.black.withOpacity(0.04),
-              blurRadius: 12,
-              offset: const Offset(0, 4)),
-        ],
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: _openManagement,
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: s == null
-              ? _buildEmptyState()
-              : Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // —— 第一行：当前服务器 + HTTPS 标签 ——
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        Text(
-                          '当前服务器',
-                          style: TextStyle(
-                              fontSize: 14,
-                              color: Colors.grey.shade500,
-                              fontWeight: FontWeight.w600),
-                        ),
-                        _buildHttpsBadge(s),
-                      ],
-                    ),
-                    // —— 第二行：服务器名称主标题 ——
-                    const SizedBox(height: 16),
-                    Text(
-                      _label(s),
-                      style: const TextStyle(
-                          fontSize: 28,
-                          color: Colors.black,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: -0.5),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    // —— 三行详情：URL / 版本 / 用户名 ——
-                    const SizedBox(height: 16),
-                    _buildDetailRow(Icons.dns, s.url),
-                    const SizedBox(height: 12),
-                    _buildDetailRow(Icons.info_outline, _version ?? '—'),
-                    const SizedBox(height: 12),
-                    _buildDetailRow(Icons.person, s.username),
-                  ],
-                ),
-        ),
-      ),
-    );
-    return card;
-  }
-
-  // HTTPS 安全标签：url 含 https 或端口为 443 时显示，否则隐藏。
-  Widget _buildHttpsBadge(ServerConfig s) {
-    final secure = s.url.contains('https') || s.port == '443';
-    if (!secure) return const SizedBox.shrink();
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: Colors.green.shade100,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
+    if (s == null) {
+      return CupertinoListSection.insetGrouped(
+        header: Text('服务器', style: AppTypography.sectionHeader()),
         children: [
-          Icon(Icons.lock, size: 14, color: Colors.green.shade700),
-          const SizedBox(width: 4),
-          Text(
-            'HTTPS',
-            style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-                color: Colors.green.shade700,
-                letterSpacing: 0.5),
+          CupertinoListTile.notched(
+            leading: Icon(
+              CupertinoIcons.circle,
+              color: AppColors.of(AppColors.placeholder),
+              size: 22,
+            ),
+            title: Text('未连接服务器', style: AppTypography.body()),
+            subtitle: Text('点击管理服务器', style: AppTypography.subtitle()),
+            trailing: const CupertinoListTileChevron(),
+            onTap: _openManagement,
           ),
         ],
-      ),
-    );
-  }
+      );
+    }
 
-  // 详情行：蓝色前缀图标 + 灰色信息文本。
-  Widget _buildDetailRow(IconData icon, String text) {
-    return Row(
+    final secure = s.url.contains('https') || s.port == '443';
+
+    return CupertinoListSection.insetGrouped(
+      header: Text('服务器', style: AppTypography.sectionHeader()),
       children: [
-        Icon(icon, size: 20, color: Colors.blue.shade500),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Text(
-            text,
-            style: TextStyle(
-                fontSize: 16,
-                color: Colors.grey.shade600,
-                fontWeight: FontWeight.w600),
+        // 服务器名 = 入口标题，点击进入管理页
+        CupertinoListTile.notched(
+          title: Text(
+            _label(s),
+            style: AppTypography.cardTitle(),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
+          trailing: const CupertinoListTileChevron(),
+          onTap: _openManagement,
+        ),
+        // 地址：URL 紧跟一个绿色小锁图标，无任何色块底
+        CupertinoListTile(
+          title: Text('地址', style: AppTypography.body()),
+          additionalInfo: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Flexible(
+                child: Text(
+                  s.url,
+                  style: AppTypography.subtitle(),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              if (secure) ...[
+                const SizedBox(width: 6),
+                const Icon(
+                  CupertinoIcons.lock_fill,
+                  size: 13,
+                  color: CupertinoColors.systemGreen,
+                ),
+              ],
+            ],
+          ),
+        ),
+        CupertinoListTile(
+          title: Text('版本', style: AppTypography.body()),
+          additionalInfo:
+              Text(_version ?? '—', style: AppTypography.subtitle()),
+        ),
+        CupertinoListTile(
+          title: Text('当前用户', style: AppTypography.body()),
+          additionalInfo: Text(s.username, style: AppTypography.subtitle()),
         ),
       ],
     );
   }
 
-  // 未配置服务器时的占位。
-  Widget _buildEmptyState() {
-    return Row(
-      children: [
-        Icon(CupertinoIcons.circle,
-            color: AppColors.of(AppColors.placeholder), size: 22),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Text('未连接服务器  ·  点击管理服务器',
-              style: TextStyle(fontSize: 15, color: Colors.grey.shade500)),
+  // 加载态：与正式 section 同构的骨架屏，避免「先小后大」的布局跳动。
+  Widget _buildServerSectionSkeleton() {
+    return CupertinoListSection.insetGrouped(
+      header: Text('服务器', style: AppTypography.sectionHeader()),
+      children: const [
+        CupertinoListTile(
+          title: SkeletonBar(width: 160, height: 22),
+          trailing: CupertinoListTileChevron(),
         ),
-        const Icon(CupertinoIcons.chevron_forward,
-            color: Color(0xFF8E8E93), size: 18),
+        CupertinoListTile(
+          title: SkeletonBar(width: 40, height: 14),
+          additionalInfo: SkeletonBar(width: 180, height: 14),
+        ),
+        CupertinoListTile(
+          title: SkeletonBar(width: 40, height: 14),
+          additionalInfo: SkeletonBar(width: 64, height: 14),
+        ),
+        CupertinoListTile(
+          title: SkeletonBar(width: 64, height: 14),
+          additionalInfo: SkeletonBar(width: 56, height: 14),
+        ),
       ],
     );
   }

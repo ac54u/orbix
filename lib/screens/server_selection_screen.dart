@@ -1,17 +1,18 @@
 import 'dart:async';
 
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
 import '../services/qbit_api.dart';
 import '../theme/app_colors.dart';
+import '../theme/app_typography.dart';
 import '../widgets/connecting_dialog.dart';
 import 'login_screen.dart';
 import 'main_screen.dart';
 import 'server_management_screen.dart';
 
 /// App 启动首页：服务器选择页。
+///
 /// 选择一个服务器 → 弹出「连接中」遮罩 → 进入主界面。
 class ServerSelectionPage extends StatefulWidget {
   const ServerSelectionPage({super.key});
@@ -21,9 +22,6 @@ class ServerSelectionPage extends StatefulWidget {
 }
 
 class _ServerSelectionPageState extends State<ServerSelectionPage> {
-  static const Color _accent = Color(0xFF007AFF);
-  static const Color _iconBlue = Color(0xFF0060DF); // 深蓝服务器图标
-
   List<ServerConfig> _servers = [];
   bool _loading = true;
 
@@ -48,6 +46,7 @@ class _ServerSelectionPageState extends State<ServerSelectionPage> {
   // —— 选中服务器：弹出加载遮罩，真实连接成功才进入主界面 ——
   Future<void> _connect(ServerConfig s) async {
     await QBitApi.setActiveServer(s);
+    if (!mounted) return;
     final api = QBitApi();
     api.setServer(s);
 
@@ -58,13 +57,13 @@ class _ServerSelectionPageState extends State<ServerSelectionPage> {
       Future<void>.delayed(const Duration(milliseconds: 700)),
     ]);
     if (!mounted) return;
-    Navigator.of(context, rootNavigator: true).pop(); // 关闭加载遮罩
+    Navigator.of(context, rootNavigator: true).pop();
 
     final result = results[0] as ConnectResult;
     if (result.success) {
-      Get.offAll(() => const MainScreen()); // 进入主界面，清空返回栈
+      Get.offAll(() => const MainScreen());
     } else {
-      _showRetryDialog(s, result.message); // 失败：提示并可重试
+      _showRetryDialog(s, result.message);
     }
   }
 
@@ -85,7 +84,7 @@ class _ServerSelectionPageState extends State<ServerSelectionPage> {
           CupertinoDialogAction(
             onPressed: () {
               Navigator.pop(ctx);
-              _editAndRetry(s); // 当场改正凭据/地址
+              _editAndRetry(s);
             },
             child: const Text('编辑'),
           ),
@@ -93,7 +92,7 @@ class _ServerSelectionPageState extends State<ServerSelectionPage> {
             isDefaultAction: true,
             onPressed: () {
               Navigator.pop(ctx);
-              _connect(s); // 重试
+              _connect(s);
             },
             child: const Text('重试'),
           ),
@@ -104,93 +103,73 @@ class _ServerSelectionPageState extends State<ServerSelectionPage> {
 
   // 半屏弹出编辑该服务器；保存后用最新配置自动重连
   Future<void> _editAndRetry(ServerConfig s) async {
-    final saved = await Get.bottomSheet<bool>(
-      LoginScreen(editServer: s, asSheet: true),
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      barrierColor: Colors.black54,
+    final saved = await showCupertinoModalPopup<bool>(
+      context: context,
+      builder: (_) => LoginScreen(editServer: s, asSheet: true),
     );
-    await _load(); // 刷新列表（名称/地址可能已变）
+    await _load();
     if (saved == true && mounted) {
-      // 编辑保存后该服务器已设为活动，取最新配置重连
       final active = await QBitApi.loadSavedConfig();
       if (active != null && mounted) _connect(active);
     }
   }
-
 
   void _openManagement() {
     Navigator.of(context)
         .push(
           CupertinoPageRoute(builder: (_) => const ServerManagementPage()),
         )
-        .then((_) => _load()); // 返回后刷新列表（可能新增/编辑/删除）
+        .then((_) => _load());
   }
 
   @override
   Widget build(BuildContext context) {
     AppColors.watch(context);
-    return Scaffold(
+    final accent = CupertinoColors.systemBlue.resolveFrom(context);
+    return CupertinoPageScaffold(
       backgroundColor: AppColors.of(AppColors.plainBg),
-      body: SafeArea(
+      child: SafeArea(
         child: Column(
           children: [
             const SizedBox(height: 32),
-            // —— 顶部发光图标 ——
+            // —— 顶部发光图标（与启动 / 欢迎一致的光晕处理）——
             Container(
               width: 84,
               height: 84,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: _accent,
+                color: accent,
                 boxShadow: [
                   BoxShadow(
-                    color: _accent.withOpacity(0.45),
+                    color: accent.withValues(alpha: 0.45),
                     blurRadius: 36,
                     spreadRadius: 4,
                     offset: const Offset(0, 8),
                   ),
                 ],
               ),
-              child: const Icon(CupertinoIcons.arrow_down,
-                  color: Colors.white, size: 40),
+              child: const Icon(
+                CupertinoIcons.arrow_down,
+                color: CupertinoColors.white,
+                size: 40,
+              ),
             ),
             const SizedBox(height: 24),
-            // —— 主标题 ——
-            Text('Orbix',
-                style: TextStyle(
-                    fontSize: 40,
-                    fontWeight: FontWeight.w900,
-                    color: AppColors.of(AppColors.label),
-                    letterSpacing: -0.5)),
-            const SizedBox(height: 6),
-            // —— 副标题 ——
-            Text('qBittorrent 客户端',
-                style: TextStyle(
-                    fontSize: 14,
-                    color: AppColors.of(AppColors.secondaryLabel),
-                    letterSpacing: 0.5)),
-            const SizedBox(height: 40),
-            // —— 列表引导语 ——
-            Text('选择一个服务器连接',
-                style: TextStyle(
-                    fontSize: 13, color: AppColors.of(AppColors.placeholder))),
-            const SizedBox(height: 16),
-            // —— 列表 ——
+            Text('Orbix', style: AppTypography.largeTitle()),
+            const SizedBox(height: 4),
+            Text(
+              'qBittorrent 客户端',
+              style: AppTypography.subtitle().copyWith(letterSpacing: 0.5),
+            ),
+            const SizedBox(height: 32),
+            // —— 列表区 ——
             Expanded(
               child: _loading
                   ? const Center(child: CupertinoActivityIndicator())
                   : _servers.isEmpty
                       ? _buildEmpty()
-                      : ListView.separated(
-                          padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
-                          itemCount: _servers.length,
-                          separatorBuilder: (_, __) =>
-                              const SizedBox(height: 12),
-                          itemBuilder: (_, i) => _buildServerCard(_servers[i]),
-                        ),
+                      : _buildList(),
             ),
-            // —— 底部管理按钮 ——
             _buildManageButton(),
             const SizedBox(height: 12),
           ],
@@ -199,62 +178,48 @@ class _ServerSelectionPageState extends State<ServerSelectionPage> {
     );
   }
 
-  Widget _buildServerCard(ServerConfig s) {
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
+  Widget _buildList() {
+    return ListView(
+      physics: const BouncingScrollPhysics(),
+      padding: EdgeInsets.zero,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(36, 8, 20, 8),
+          child: Text(
+            '选择一个服务器连接',
+            style: AppTypography.sectionHeader(),
+          ),
+        ),
+        CupertinoListSection.insetGrouped(
+          margin: const EdgeInsets.symmetric(horizontal: 16),
+          topMargin: 0,
+          children: _servers.map(_buildServerTile).toList(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildServerTile(ServerConfig s) {
+    return CupertinoListTile.notched(
       onTap: () => _connect(s),
-      child: Container(
-        decoration: BoxDecoration(
-          color: AppColors.of(AppColors.card),
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-                color: Colors.black.withOpacity(0.04),
-                blurRadius: 12,
-                offset: const Offset(0, 4)),
-          ],
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-        child: Row(
-          children: [
-            // 淡蓝圆角方形 + 深蓝图标
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: AppColors.of(AppColors.accentSoftBg),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Icon(Icons.dns, color: _iconBlue, size: 24),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(_label(s),
-                      style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.of(AppColors.label)),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis),
-                  const SizedBox(height: 3),
-                  Text(s.url,
-                      style: TextStyle(
-                          fontSize: 12,
-                          color: AppColors.of(AppColors.secondaryLabel)),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            Icon(Icons.chevron_right,
-                color: AppColors.of(AppColors.placeholder), size: 22),
-          ],
-        ),
+      leading: const Icon(
+        CupertinoIcons.cloud_fill,
+        color: CupertinoColors.systemBlue,
+        size: 24,
       ),
+      title: Text(
+        _label(s),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: AppTypography.body().copyWith(fontWeight: FontWeight.w600),
+      ),
+      subtitle: Text(
+        s.url,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: AppTypography.caption(),
+      ),
+      trailing: const CupertinoListTileChevron(),
     );
   }
 
@@ -263,12 +228,18 @@ class _ServerSelectionPageState extends State<ServerSelectionPage> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.dns_outlined,
-              size: 48, color: AppColors.of(AppColors.placeholder)),
-          const SizedBox(height: 12),
-          Text('暂无服务器，点击下方添加',
-              style: TextStyle(
-                  fontSize: 14, color: AppColors.of(AppColors.secondaryLabel))),
+          Icon(
+            CupertinoIcons.cloud,
+            size: 44,
+            color: AppColors.of(AppColors.placeholder),
+          ),
+          const SizedBox(height: 14),
+          Text(
+            '暂无服务器，点击下方添加',
+            style: AppTypography.subtitle(
+              color: AppColors.of(AppColors.tertiaryLabel),
+            ),
+          ),
         ],
       ),
     );
@@ -280,11 +251,20 @@ class _ServerSelectionPageState extends State<ServerSelectionPage> {
       child: const Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.settings, color: _accent, size: 18),
+          Icon(
+            CupertinoIcons.settings,
+            color: CupertinoColors.systemBlue,
+            size: 18,
+          ),
           SizedBox(width: 6),
-          Text('管理服务器',
-              style: TextStyle(
-                  fontSize: 15, color: _accent, fontWeight: FontWeight.w600)),
+          Text(
+            '管理服务器',
+            style: TextStyle(
+              fontSize: 15,
+              color: CupertinoColors.systemBlue,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
         ],
       ),
     );

@@ -1,6 +1,6 @@
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+
 import 'screens/splash_screen.dart';
 
 void main() {
@@ -12,31 +12,19 @@ class OrbixApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GetMaterialApp(
+    return const GetCupertinoApp(
       title: 'Orbix',
-      theme: _buildTheme(Brightness.light),
-      darkTheme: _buildTheme(Brightness.dark),
-      themeMode: ThemeMode.system, // 跟随系统明暗
-      // 给 Cupertino 控件一个与 Material 一致的亮度，避免默认配色各走各的
-      builder: (context, child) => CupertinoTheme(
-        data: CupertinoThemeData(
-          brightness: Theme.of(context).brightness,
-          primaryColor: CupertinoColors.activeBlue,
-        ),
-        child: child!,
+      // Dark Mode Only：CupertinoThemeData 比 ThemeData 简洁，没有
+      // light/dark/themeMode 三件套——一锤定音 brightness: dark。
+      theme: CupertinoThemeData(
+        brightness: Brightness.dark,
+        primaryColor: CupertinoColors.systemBlue,
+        scaffoldBackgroundColor: Color(0xFF000000),
       ),
-      home: const SplashScreen(), // 启动决策：自动登录 / 欢迎页 / 登录页
+      defaultTransition: Transition.cupertino,
+      popGesture: true,
+      home: SplashScreen(),
       debugShowCheckedModeBanner: false,
-    );
-  }
-
-  ThemeData _buildTheme(Brightness brightness) {
-    final dark = brightness == Brightness.dark;
-    return ThemeData(
-      brightness: brightness,
-      scaffoldBackgroundColor:
-          dark ? const Color(0xFF000000) : const Color(0xFFF2F2F7),
-      primaryColor: CupertinoColors.activeBlue,
     );
   }
 }

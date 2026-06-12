@@ -1,10 +1,13 @@
-import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart';
-import 'package:get/get.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/cupertino.dart';
+import 'package:get/get.dart';
+
 import '../services/qbit_api.dart';
 import '../theme/app_colors.dart';
+import '../theme/app_typography.dart';
+import '../widgets/toast.dart';
 
+/// 添加种子页：支持磁力链接 / URL / 本地 .torrent 文件，三选一。
 class AddTorrentScreen extends StatefulWidget {
   const AddTorrentScreen({super.key});
 
@@ -13,35 +16,21 @@ class AddTorrentScreen extends StatefulWidget {
 }
 
 class _AddTorrentScreenState extends State<AddTorrentScreen> {
-  // 状态变量
-  bool _isLinkMode = true; // true: 链接模式, false: 文件模式
-  bool _isInputValid = false; // 控制“添加”按钮的激活状态
-  bool _submitting = false; // 提交中
+  bool _isLinkMode = true; // true: 链接，false: 文件
+  bool _isInputValid = false;
+  bool _submitting = false;
 
-  // 文件模式选中的种子
   List<int>? _pickedBytes;
   String? _pickedName;
 
-  // 控制器
-  final TextEditingController _linkController = TextEditingController();
-  final TextEditingController _categoryController = TextEditingController();
-  final TextEditingController _tagsController = TextEditingController();
-  final TextEditingController _pathController = TextEditingController();
-
-  // 颜色常量：强调色与中性灰固定（明暗皆可读），其余结构色动态解析
-  static const Color _sectionColor = Color(0xFF8E8E93);
-  static const Color _accent = Color(0xFF007AFF);
-  // 动态解析的结构色（随系统明暗变化）
-  Color get _bgColor => AppColors.of(AppColors.groupedBg);
-  Color get _cardColor => AppColors.of(AppColors.card);
-  Color get _textColor => AppColors.of(AppColors.label);
-  Color get _hintColor => AppColors.of(AppColors.placeholder);
-  Color get _dividerColor => AppColors.of(AppColors.separator);
+  final _linkController = TextEditingController();
+  final _categoryController = TextEditingController();
+  final _tagsController = TextEditingController();
+  final _pathController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
-    // 链接框有内容时激活“添加”
     _linkController.addListener(_refreshValid);
   }
 
@@ -54,7 +43,6 @@ class _AddTorrentScreenState extends State<AddTorrentScreen> {
     super.dispose();
   }
 
-  // 根据当前模式刷新“添加”按钮可用状态
   void _refreshValid() {
     final valid = _isLinkMode
         ? _linkController.text.trim().isNotEmpty
@@ -74,11 +62,11 @@ class _AddTorrentScreenState extends State<AddTorrentScreen> {
     if (!mounted || result == null || result.files.isEmpty) return;
     final f = result.files.first;
     if (f.bytes == null) {
-      _snack('无法读取文件内容', ok: false);
+      Toast.error(context, '无法读取文件内容');
       return;
     }
     if (!f.name.toLowerCase().endsWith('.torrent')) {
-      _snack('请选择 .torrent 文件', ok: false);
+      Toast.error(context, '请选择 .torrent 文件');
       return;
     }
     setState(() {
@@ -88,7 +76,6 @@ class _AddTorrentScreenState extends State<AddTorrentScreen> {
     _refreshValid();
   }
 
-  // 点击“添加”
   Future<void> _handleAdd() async {
     if (!_isInputValid || _submitting) return;
     setState(() => _submitting = true);
@@ -120,352 +107,212 @@ class _AddTorrentScreenState extends State<AddTorrentScreen> {
 
     if (error == null) {
       Get.back(result: true);
-      _snack('任务已添加到下载队列', ok: true);
+      Toast.success(context, '任务已添加到下载队列');
     } else {
-      _snack(error, ok: false);
+      Toast.error(context, error);
     }
-  }
-
-  void _snack(String msg, {required bool ok}) {
-    Get.snackbar(
-      ok ? '成功' : '失败',
-      msg,
-      snackPosition: SnackPosition.BOTTOM,
-      margin: const EdgeInsets.all(16),
-      borderRadius: 12,
-      backgroundColor: const Color(0xFF1C1C1E),
-      colorText: Colors.white,
-      icon: Icon(
-        ok ? CupertinoIcons.checkmark_circle : CupertinoIcons.exclamationmark_circle,
-        color: ok ? const Color(0xFF34C759) : const Color(0xFFFF3B30),
-      ),
-      duration: const Duration(seconds: 2),
-    );
   }
 
   @override
   Widget build(BuildContext context) {
     AppColors.watch(context);
-    return Scaffold(
-      backgroundColor: _bgColor,
-      body: SafeArea(
-        child: Column(
-          children: [
-            const SizedBox(height: 10),
-            _buildTopBar(),
-            const SizedBox(height: 20),
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildSegmentedControl(),
-                    const SizedBox(height: 24),
-                    if (_isLinkMode) ...[
-                      _buildSectionTitle("种子链接"),
-                      const SizedBox(height: 8),
-                      _buildLinkInput(),
-                      const SizedBox(height: 8),
-                      _buildSubText("支持 magnet: 或 http(s) 链接，可多行批量添加"),
-                    ] else ...[
-                      _buildSectionTitle("种子文件"),
-                      const SizedBox(height: 8),
-                      _buildFilePicker(),
-                      const SizedBox(height: 8),
-                      _buildSubText("从「文件」App 选择 .torrent 文件"),
-                    ],
-                    const SizedBox(height: 24),
-                    _buildSectionTitle("可选设置"),
-                    const SizedBox(height: 8),
-                    _buildSettingsGroup(),
-                    const SizedBox(height: 40),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // —— 顶部导航栏 ——
-  Widget _buildTopBar() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          _buildPillButton(
-            text: "取消",
-            onTap: () => Get.back(),
-            isActive: true,
+    final canAdd = _isInputValid && !_submitting;
+    return CupertinoPageScaffold(
+      backgroundColor: AppColors.of(AppColors.groupedBg),
+      navigationBar: CupertinoNavigationBar(
+        backgroundColor:
+            AppColors.of(AppColors.groupedBg).withValues(alpha: 0.85),
+        border: Border(
+          bottom: BorderSide(
+            color: AppColors.of(AppColors.separator),
+            width: 0.0,
           ),
-          Text(
-            "添加种子",
-            style: TextStyle(
-              fontSize: 17,
-              fontWeight: FontWeight.w600,
-              color: _textColor,
+        ),
+        leading: CupertinoButton(
+          padding: EdgeInsets.zero,
+          minimumSize: Size.zero,
+          onPressed: () => Get.back(),
+          child: Text(
+            '取消',
+            style: AppTypography.body().copyWith(
+              color: CupertinoColors.systemBlue,
             ),
           ),
-          _buildAddButton(),
-        ],
-      ),
-    );
-  }
-
-  // 圆角胶囊按钮（取消）
-  Widget _buildPillButton({
-    required String text,
-    required VoidCallback onTap,
-    required bool isActive,
-  }) {
-    return CupertinoButton(
-      padding: EdgeInsets.zero,
-      onPressed: isActive ? onTap : null,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
-        decoration: BoxDecoration(
-          color: _cardColor,
-          borderRadius: BorderRadius.circular(20),
         ),
-        child: Text(
-          text,
-          style: TextStyle(
-            color: isActive ? _textColor : _hintColor,
-            fontSize: 15,
-            fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
+        middle: Text('添加种子', style: AppTypography.navTitle()),
+        trailing: CupertinoButton(
+          padding: EdgeInsets.zero,
+          minimumSize: Size.zero,
+          onPressed: canAdd ? _handleAdd : null,
+          child: _submitting
+              ? const CupertinoActivityIndicator(radius: 10)
+              : Text(
+                  '添加',
+                  style: AppTypography.body().copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: canAdd
+                        ? CupertinoColors.systemBlue
+                        : AppColors.of(AppColors.tertiaryLabel),
+                  ),
+                ),
+        ),
+      ),
+      child: SafeArea(
+        child: SingleChildScrollView(
+          physics: const BouncingScrollPhysics(
+            parent: AlwaysScrollableScrollPhysics(),
           ),
-        ),
-      ),
-    );
-  }
-
-  // “添加”按钮：激活时高亮蓝色，提交中显示菊花
-  Widget _buildAddButton() {
-    final active = _isInputValid && !_submitting;
-    return CupertinoButton(
-      padding: EdgeInsets.zero,
-      onPressed: active ? _handleAdd : null,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
-        decoration: BoxDecoration(
-          color: active ? _accent : _cardColor,
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: _submitting
-            ? const SizedBox(
-                width: 16,
-                height: 16,
-                child: CupertinoActivityIndicator(radius: 8),
-              )
-            : Text(
-                "添加",
-                style: TextStyle(
-                  color: active ? Colors.white : _hintColor,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const SizedBox(height: 8),
+              // —— 链接 / 文件 切换 ——
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: CupertinoSlidingSegmentedControl<int>(
+                  groupValue: _isLinkMode ? 0 : 1,
+                  children: {
+                    0: _segLabel('链接'),
+                    1: _segLabel('文件'),
+                  },
+                  onValueChanged: (v) {
+                    if (v == null) return;
+                    setState(() => _isLinkMode = v == 0);
+                    _refreshValid();
+                  },
                 ),
               ),
-      ),
-    );
-  }
-
-  // —— 分段控制器（链接 / 文件）——
-  Widget _buildSegmentedControl() {
-    return Container(
-      height: 48,
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: _cardColor,
-        borderRadius: BorderRadius.circular(24),
-      ),
-      child: Row(
-        children: [
-          Expanded(child: _buildSegmentItem("链接", true)),
-          Expanded(child: _buildSegmentItem("文件", false)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSegmentItem(String title, bool isLink) {
-    final isSelected = _isLinkMode == isLink;
-    return GestureDetector(
-      onTap: () {
-        setState(() => _isLinkMode = isLink);
-        _refreshValid();
-      },
-      behavior: HitTestBehavior.opaque,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeOut,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: isSelected ? AppColors.of(AppColors.accentSoftBg) : Colors.transparent,
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Text(
-          title,
-          style: TextStyle(
-            fontSize: 15,
-            fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-            color: isSelected ? _accent : _sectionColor,
+              if (_isLinkMode)
+                _buildLinkSection()
+              else
+                _buildFileSection(),
+              _buildOptionsSection(),
+              const SizedBox(height: 32),
+            ],
           ),
         ),
       ),
     );
   }
 
-  // —— 链接输入 ——
-  Widget _buildLinkInput() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: _cardColor,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: TextField(
-        controller: _linkController,
-        maxLines: 5,
-        autofocus: true,
-        cursorColor: _accent,
-        style: TextStyle(fontSize: 16, color: _textColor),
-        decoration: InputDecoration(
-          hintText: "磁力链接或种子 URL",
-          hintStyle: TextStyle(color: _hintColor, fontSize: 16),
-          border: InputBorder.none,
-          isDense: true,
-          contentPadding: EdgeInsets.zero,
+  Widget _segLabel(String t) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Text(t, style: AppTypography.body().copyWith(fontSize: 14)),
+      );
+
+  // —— 链接输入 section：单 tile 多行文本 ——
+  Widget _buildLinkSection() {
+    return CupertinoListSection.insetGrouped(
+      header: Text('种子链接', style: AppTypography.sectionHeader()),
+      footer: Text(
+        '支持 magnet: 或 http(s) 链接，可多行批量添加',
+        style: AppTypography.caption(
+          color: AppColors.of(AppColors.tertiaryLabel),
         ),
       ),
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          child: CupertinoTextField.borderless(
+            controller: _linkController,
+            maxLines: 5,
+            autofocus: true,
+            placeholder: '磁力链接或种子 URL',
+            style: AppTypography.body(),
+            placeholderStyle: AppTypography.body(
+              color: AppColors.of(AppColors.placeholder),
+            ),
+            padding: EdgeInsets.zero,
+          ),
+        ),
+      ],
     );
   }
 
-  // —— 文件选择 ——
-  Widget _buildFilePicker() {
+  // —— 文件选择 section：单 tile，已选 / 未选两态 ——
+  Widget _buildFileSection() {
     final picked = _pickedName != null;
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: _pickFile,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
-        decoration: BoxDecoration(
-          color: _cardColor,
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Row(
-          children: [
-            Icon(
-              picked ? CupertinoIcons.doc_fill : CupertinoIcons.doc_text_search,
-              color: picked ? _accent : _sectionColor,
-              size: 24,
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                picked ? _pickedName! : "点击选择 .torrent 文件",
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 16,
-                  color: picked ? _textColor : _hintColor,
-                ),
-              ),
-            ),
-            if (picked)
-              GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: () {
-                  setState(() {
-                    _pickedBytes = null;
-                    _pickedName = null;
-                  });
-                  _refreshValid();
-                },
-                child: Icon(CupertinoIcons.clear_circled_solid,
-                    color: _hintColor, size: 20),
-              )
-            else
-              Icon(CupertinoIcons.chevron_right, color: _hintColor, size: 16),
-          ],
+    return CupertinoListSection.insetGrouped(
+      header: Text('种子文件', style: AppTypography.sectionHeader()),
+      footer: Text(
+        '从「文件」App 选择 .torrent 文件',
+        style: AppTypography.caption(
+          color: AppColors.of(AppColors.tertiaryLabel),
         ),
       ),
-    );
-  }
-
-  // —— 可选设置 ——
-  Widget _buildSettingsGroup() {
-    return Container(
-      decoration: BoxDecoration(
-        color: _cardColor,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        children: [
-          _buildSettingRow("分类", "点击输入", _categoryController, false),
-          _buildSettingRow("标签", "多个标签用逗号分隔", _tagsController, false),
-          _buildSettingRow("保存路径", "留空＝服务器默认", _pathController, true),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSettingRow(
-      String title, String hint, TextEditingController controller, bool isLast) {
-    return Container(
-      decoration: BoxDecoration(
-        // 修复点：border 需要 Border 而非 BorderSide
-        border: isLast
-            ? null
-            : Border(bottom: BorderSide(color: _dividerColor, width: 0.5)),
-      ),
-      child: Row(
-        children: [
-          const SizedBox(width: 16),
-          Text(title, style: TextStyle(fontSize: 16, color: _textColor)),
-          const SizedBox(width: 16),
-          Expanded(
-            child: TextField(
-              controller: controller,
-              textAlign: TextAlign.right,
-              cursorColor: _accent,
-              style: TextStyle(fontSize: 16, color: _textColor),
-              decoration: InputDecoration(
-                hintText: hint,
-                hintStyle: TextStyle(color: _hintColor, fontSize: 15),
-                border: InputBorder.none,
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-              ),
+      children: [
+        CupertinoListTile.notched(
+          onTap: _pickFile,
+          leading: Icon(
+            picked ? CupertinoIcons.doc_fill : CupertinoIcons.doc_text_search,
+            color: picked
+                ? CupertinoColors.systemBlue
+                : AppColors.of(AppColors.secondaryLabel),
+            size: 24,
+          ),
+          title: Text(
+            picked ? _pickedName! : '点击选择 .torrent 文件',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: AppTypography.body().copyWith(
+              color: picked
+                  ? AppColors.of(AppColors.label)
+                  : AppColors.of(AppColors.placeholder),
             ),
           ),
-        ],
-      ),
+          trailing: picked
+              ? GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () {
+                    setState(() {
+                      _pickedBytes = null;
+                      _pickedName = null;
+                    });
+                    _refreshValid();
+                  },
+                  child: Icon(
+                    CupertinoIcons.clear_circled_solid,
+                    color: AppColors.of(AppColors.tertiaryLabel),
+                    size: 20,
+                  ),
+                )
+              : const CupertinoListTileChevron(),
+        ),
+      ],
     );
   }
 
-  // —— 辅助 ——
-  Widget _buildSectionTitle(String title) {
-    return Padding(
-      padding: const EdgeInsets.only(left: 4),
-      child: Text(
-        title,
-        style: const TextStyle(
-            fontSize: 14, color: _sectionColor, fontWeight: FontWeight.w500),
-      ),
+  // —— 可选设置 section：key/value 行 ——
+  Widget _buildOptionsSection() {
+    return CupertinoFormSection.insetGrouped(
+      header: Text('可选设置', style: AppTypography.sectionHeader()),
+      children: [
+        _kvRow('分类', '点击输入', _categoryController),
+        _kvRow('标签', '多个标签用逗号分隔', _tagsController),
+        _kvRow('保存路径', '留空 = 服务器默认', _pathController),
+      ],
     );
   }
 
-  Widget _buildSubText(String text) {
-    return Padding(
-      padding: const EdgeInsets.only(left: 4),
-      child: Text(
-        text,
-        style: const TextStyle(fontSize: 12, color: _sectionColor),
+  Widget _kvRow(
+    String label,
+    String hint,
+    TextEditingController controller,
+  ) {
+    return CupertinoFormRow(
+      prefix: SizedBox(
+        width: 84,
+        child: Text(label, style: AppTypography.body()),
+      ),
+      child: CupertinoTextField.borderless(
+        controller: controller,
+        textAlign: TextAlign.right,
+        placeholder: hint,
+        style: AppTypography.body(),
+        placeholderStyle: AppTypography.body(
+          color: AppColors.of(AppColors.placeholder),
+        ),
+        padding: EdgeInsets.zero,
       ),
     );
   }
