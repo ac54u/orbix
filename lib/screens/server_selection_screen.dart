@@ -125,7 +125,7 @@ class _ServerSelectionPageState extends State<ServerSelectionPage> {
   @override
   Widget build(BuildContext context) {
     AppColors.watch(context);
-    final accent = CupertinoColors.systemBlue.resolveFrom(context);
+    final accent = AppColors.accent.resolveFrom(context);
     return CupertinoPageScaffold(
       backgroundColor: AppColors.of(AppColors.plainBg),
       child: SafeArea(
@@ -204,7 +204,7 @@ class _ServerSelectionPageState extends State<ServerSelectionPage> {
       onTap: () => _connect(s),
       leading: const Icon(
         CupertinoIcons.cloud_fill,
-        color: CupertinoColors.systemBlue,
+        color: AppColors.accent,
         size: 24,
       ),
       title: Text(
@@ -253,7 +253,7 @@ class _ServerSelectionPageState extends State<ServerSelectionPage> {
         children: [
           Icon(
             CupertinoIcons.settings,
-            color: CupertinoColors.systemBlue,
+            color: AppColors.accent,
             size: 18,
           ),
           SizedBox(width: 6),
@@ -261,7 +261,7 @@ class _ServerSelectionPageState extends State<ServerSelectionPage> {
             '管理服务器',
             style: TextStyle(
               fontSize: 15,
-              color: CupertinoColors.systemBlue,
+              color: AppColors.accent,
               fontWeight: FontWeight.w600,
             ),
           ),

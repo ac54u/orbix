@@ -259,7 +259,7 @@ class _LoginScreenState extends State<LoginScreen>
                 child: Text(
                   '取消',
                   style: AppTypography.body().copyWith(
-                    color: CupertinoColors.systemBlue,
+                    color: AppColors.accent,
                   ),
                 ),
               )
@@ -275,7 +275,7 @@ class _LoginScreenState extends State<LoginScreen>
           child: Text(
             '保存',
             style: AppTypography.body().copyWith(
-              color: CupertinoColors.systemBlue,
+              color: AppColors.accent,
               fontWeight: FontWeight.w600,
             ),
           ),
@@ -351,7 +351,7 @@ class _LoginScreenState extends State<LoginScreen>
                             child: Text(
                               '取消',
                               style: AppTypography.body().copyWith(
-                                color: CupertinoColors.systemBlue,
+                                color: AppColors.accent,
                               ),
                             ),
                           ),
@@ -366,7 +366,7 @@ class _LoginScreenState extends State<LoginScreen>
                             child: Text(
                               '保存',
                               style: AppTypography.body().copyWith(
-                                color: CupertinoColors.systemBlue,
+                                color: AppColors.accent,
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
@@ -533,7 +533,7 @@ class _LoginScreenState extends State<LoginScreen>
         prefix: Text(
           _isTesting ? '测试中…' : '测试连接',
           style: AppTypography.body().copyWith(
-            color: CupertinoColors.systemBlue,
+            color: AppColors.accent,
             fontWeight: FontWeight.w500,
           ),
         ),
@@ -542,13 +542,13 @@ class _LoginScreenState extends State<LoginScreen>
             : ok
                 ? const Icon(
                     CupertinoIcons.checkmark_circle_fill,
-                    color: CupertinoColors.systemGreen,
+                    color: AppColors.success,
                     size: 22,
                   )
                 : failed
                     ? const Icon(
                         CupertinoIcons.xmark_circle_fill,
-                        color: CupertinoColors.systemRed,
+                        color: AppColors.danger,
                         size: 22,
                       )
                     : const SizedBox.shrink(),
@@ -567,7 +567,7 @@ class _LoginScreenState extends State<LoginScreen>
         child: Text(
           '连接成功，凭据有效，可以保存了',
           style: AppTypography.caption(
-            color: CupertinoColors.systemGreen,
+            color: AppColors.success,
           ).copyWith(fontWeight: FontWeight.w500),
         ),
       );
@@ -597,7 +597,7 @@ class _LoginScreenState extends State<LoginScreen>
           Text(
             title,
             style: AppTypography.caption(
-              color: CupertinoColors.systemRed,
+              color: AppColors.danger,
             ).copyWith(fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 6),

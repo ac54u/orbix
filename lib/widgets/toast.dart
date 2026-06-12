@@ -169,12 +169,12 @@ class _Pill extends StatelessWidget {
       case ToastType.success:
         return (
           CupertinoIcons.check_mark_circled_solid,
-          CupertinoColors.systemGreen,
+          AppColors.success,
         );
       case ToastType.error:
         return (
           CupertinoIcons.exclamationmark_circle_fill,
-          CupertinoColors.systemRed,
+          AppColors.danger,
         );
       case ToastType.neutral:
         return (null, AppColors.of(AppColors.label));

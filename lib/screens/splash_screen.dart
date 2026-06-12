@@ -37,7 +37,7 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   Widget build(BuildContext context) {
     AppColors.watch(context);
-    final accent = CupertinoColors.systemBlue.resolveFrom(context);
+    final accent = AppColors.accent.resolveFrom(context);
     return CupertinoPageScaffold(
       backgroundColor: AppColors.of(AppColors.plainBg),
       child: Center(
@@ -53,7 +53,7 @@ class _SplashScreenState extends State<SplashScreen> {
                 gradient: const LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
-                  colors: [Color(0xFF0A84FF), Color(0xFF0060DF)],
+                  colors: [Color(0xFF366EF6), Color(0xFF0E52BA)],
                 ),
                 boxShadow: [
                   BoxShadow(

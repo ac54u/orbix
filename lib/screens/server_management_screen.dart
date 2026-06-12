@@ -158,16 +158,22 @@ class _ServerManagementPageState extends State<ServerManagementPage> {
           onPressed: _addServer,
           child: const Icon(
             CupertinoIcons.add,
-            color: CupertinoColors.systemBlue,
+            color: AppColors.accent,
             size: 24,
           ),
         ),
       ),
-      child: _loading
-          ? const Center(child: CupertinoActivityIndicator())
-          : _servers.isEmpty
-              ? _buildEmpty()
-              : _buildList(),
+      // 半透 nav bar 走 MediaQuery padding，必须 SafeArea(top: true) 才能
+      // 把内容推到 nav bar 之下，否则首行服务器会被遮。
+      child: SafeArea(
+        top: true,
+        bottom: false,
+        child: _loading
+            ? const Center(child: CupertinoActivityIndicator())
+            : _servers.isEmpty
+                ? _buildEmpty()
+                : _buildList(),
+      ),
     );
   }
 
@@ -203,35 +209,32 @@ class _ServerManagementPageState extends State<ServerManagementPage> {
 
   // 单 inset 容器 + 行间 0.5pt hairline；外层 Clip 让左滑揭示在圆角内。
   Widget _buildList() {
-    return SafeArea(
-      top: false,
-      child: SingleChildScrollView(
-        physics: const BouncingScrollPhysics(
-          parent: AlwaysScrollableScrollPhysics(),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 18, 16, 32),
-          child: Container(
-            decoration: BoxDecoration(
-              color: AppColors.of(AppColors.card),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            clipBehavior: Clip.hardEdge,
-            child: Column(
-              children: [
-                for (var i = 0; i < _servers.length; i++) ...[
-                  if (i > 0)
-                    Padding(
-                      padding: const EdgeInsets.only(left: 16),
-                      child: Container(
-                        height: 0.5,
-                        color: AppColors.of(AppColors.separator),
-                      ),
+    return SingleChildScrollView(
+      physics: const BouncingScrollPhysics(
+        parent: AlwaysScrollableScrollPhysics(),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 18, 16, 32),
+        child: Container(
+          decoration: BoxDecoration(
+            color: AppColors.of(AppColors.card),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          clipBehavior: Clip.hardEdge,
+          child: Column(
+            children: [
+              for (var i = 0; i < _servers.length; i++) ...[
+                if (i > 0)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 16),
+                    child: Container(
+                      height: 0.5,
+                      color: AppColors.of(AppColors.separator),
                     ),
-                  _buildSlidableRow(_servers[i]),
-                ],
+                  ),
+                _buildSlidableRow(_servers[i]),
               ],
-            ),
+            ],
           ),
         ),
       ),
@@ -245,21 +248,21 @@ class _ServerManagementPageState extends State<ServerManagementPage> {
       if (!active)
         SlidableAction(
           onPressed: (_) => _switchTo(s),
-          backgroundColor: CupertinoColors.systemBlue,
+          backgroundColor: AppColors.accent,
           foregroundColor: CupertinoColors.white,
           icon: CupertinoIcons.link,
           label: '连接',
         ),
       SlidableAction(
         onPressed: (_) => _editServer(s),
-        backgroundColor: CupertinoColors.systemOrange,
+        backgroundColor: AppColors.warning,
         foregroundColor: CupertinoColors.white,
         icon: CupertinoIcons.pencil,
         label: '编辑',
       ),
       SlidableAction(
         onPressed: (_) => _confirmDelete(s),
-        backgroundColor: CupertinoColors.systemRed,
+        backgroundColor: AppColors.danger,
         foregroundColor: CupertinoColors.white,
         icon: CupertinoIcons.delete,
         label: '删除',
@@ -291,7 +294,7 @@ class _ServerManagementPageState extends State<ServerManagementPage> {
                     ? CupertinoIcons.checkmark_circle_fill
                     : CupertinoIcons.circle,
                 color: active
-                    ? CupertinoColors.systemBlue
+                    ? AppColors.accent
                     : AppColors.of(AppColors.placeholder),
                 size: 22,
               ),
@@ -326,7 +329,7 @@ class _ServerManagementPageState extends State<ServerManagementPage> {
                   child: Text(
                     '使用中',
                     style: AppTypography.caption(
-                      color: CupertinoColors.systemBlue,
+                      color: AppColors.accent,
                     ).copyWith(fontWeight: FontWeight.w600),
                   ),
                 ),

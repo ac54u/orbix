@@ -135,7 +135,7 @@ class _AddTorrentScreenState extends State<AddTorrentScreen> {
           child: Text(
             '取消',
             style: AppTypography.body().copyWith(
-              color: CupertinoColors.systemBlue,
+              color: AppColors.accent,
             ),
           ),
         ),
@@ -151,7 +151,7 @@ class _AddTorrentScreenState extends State<AddTorrentScreen> {
                   style: AppTypography.body().copyWith(
                     fontWeight: FontWeight.w600,
                     color: canAdd
-                        ? CupertinoColors.systemBlue
+                        ? AppColors.accent
                         : AppColors.of(AppColors.tertiaryLabel),
                   ),
                 ),
@@ -246,7 +246,7 @@ class _AddTorrentScreenState extends State<AddTorrentScreen> {
           leading: Icon(
             picked ? CupertinoIcons.doc_fill : CupertinoIcons.doc_text_search,
             color: picked
-                ? CupertinoColors.systemBlue
+                ? AppColors.accent
                 : AppColors.of(AppColors.secondaryLabel),
             size: 24,
           ),

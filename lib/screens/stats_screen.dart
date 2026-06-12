@@ -111,11 +111,11 @@ class _StatsScreenState extends State<StatsScreen> {
   Color get _connColor {
     switch ((_ss['connection_status'] ?? '').toString()) {
       case 'connected':
-        return CupertinoColors.systemGreen;
+        return AppColors.success;
       case 'firewalled':
-        return CupertinoColors.systemOrange;
+        return AppColors.warning;
       default:
-        return CupertinoColors.systemRed;
+        return AppColors.danger;
     }
   }
 
@@ -242,7 +242,7 @@ class _StatsScreenState extends State<StatsScreen> {
         _tile('累计下载', _fmtSize(_g('alltime_dl'))),
         _tile('累计上传', _fmtSize(_g('alltime_ul'))),
         _tile('全局分享率', _g('global_ratio').toStringAsFixed(2),
-            valueColor: CupertinoColors.systemOrange),
+            valueColor: AppColors.warning),
         _tile('本次浪费', _fmtSize(_g('total_wasted_session')), muted: true),
       ],
     );
@@ -282,17 +282,17 @@ class _StatsScreenState extends State<StatsScreen> {
 
   Widget _buildOverviewSection(Map<String, int> c) {
     final items = <List<dynamic>>[
-      ['总任务', c['total']!, CupertinoColors.systemBlue,
+      ['总任务', c['total']!, AppColors.accent,
           CupertinoIcons.square_stack_3d_up_fill],
-      ['下载中', c['dl']!, const Color(0xFF5AC8FA),
+      ['下载中', c['dl']!, const Color(0xFF4070F2),
           CupertinoIcons.arrow_down_circle_fill],
-      ['做种中', c['up']!, CupertinoColors.systemGreen,
+      ['做种中', c['up']!, AppColors.success,
           CupertinoIcons.arrow_up_circle_fill],
       ['已暂停', c['paused']!, AppColors.of(AppColors.secondaryLabel),
           CupertinoIcons.pause_circle_fill],
-      ['校验中', c['checking']!, CupertinoColors.systemOrange,
+      ['校验中', c['checking']!, AppColors.warning,
           CupertinoIcons.arrow_2_circlepath_circle_fill],
-      ['错误', c['error']!, CupertinoColors.systemRed,
+      ['错误', c['error']!, AppColors.danger,
           CupertinoIcons.exclamationmark_circle_fill],
     ];
     return CupertinoListSection.insetGrouped(

@@ -117,26 +117,26 @@ class _TorrentDetailScreenState extends State<TorrentDetailScreen> {
       case 'forcedDL':
         return (
           text: '下载中',
-          color: CupertinoColors.systemBlue,
+          color: AppColors.accent,
           icon: CupertinoIcons.arrow_down_circle_fill,
         );
       case 'stalledDL':
         return (
           text: '等待下载',
-          color: CupertinoColors.systemBlue,
+          color: AppColors.accent,
           icon: CupertinoIcons.arrow_down_circle,
         );
       case 'uploading':
       case 'forcedUP':
         return (
           text: '上传中',
-          color: CupertinoColors.systemGreen,
+          color: AppColors.success,
           icon: CupertinoIcons.arrow_up_circle_fill,
         );
       case 'stalledUP':
         return (
           text: '做种中',
-          color: CupertinoColors.systemGreen,
+          color: AppColors.success,
           icon: CupertinoIcons.arrow_up_circle_fill,
         );
       case 'pausedDL':
@@ -158,7 +158,7 @@ class _TorrentDetailScreenState extends State<TorrentDetailScreen> {
       case 'checkingResumeData':
         return (
           text: '校验中',
-          color: CupertinoColors.systemOrange,
+          color: AppColors.warning,
           icon: CupertinoIcons.arrow_2_circlepath_circle_fill,
         );
       case 'queuedDL':
@@ -172,7 +172,7 @@ class _TorrentDetailScreenState extends State<TorrentDetailScreen> {
       case 'missingFiles':
         return (
           text: '错误',
-          color: CupertinoColors.systemRed,
+          color: AppColors.danger,
           icon: CupertinoIcons.exclamationmark_circle_fill,
         );
       default:
@@ -265,23 +265,30 @@ class _TorrentDetailScreenState extends State<TorrentDetailScreen> {
           onPressed: _confirmDelete,
           child: const Icon(
             CupertinoIcons.delete,
-            color: CupertinoColors.systemRed,
+            color: AppColors.danger,
             size: 22,
           ),
         ),
       ),
-      child: CustomScrollView(
-        physics: const BouncingScrollPhysics(
-          parent: AlwaysScrollableScrollPhysics(),
+      // 半透 CupertinoNavigationBar 会通过 MediaQuery 给 child 设 padding.top
+      // = navBar+statusBar，但 CustomScrollView 不自动消费 —— 必须包一层
+      // SafeArea 否则首个 sliver 会被挤到 nav bar 之下。
+      child: SafeArea(
+        top: true,
+        bottom: false,
+        child: CustomScrollView(
+          physics: const BouncingScrollPhysics(
+            parent: AlwaysScrollableScrollPhysics(),
+          ),
+          slivers: [
+            SliverToBoxAdapter(child: _buildHero(info, progress)),
+            SliverToBoxAdapter(child: _buildActions()),
+            SliverToBoxAdapter(child: _buildTransferSection()),
+            SliverToBoxAdapter(child: _buildInfoSection()),
+            SliverToBoxAdapter(child: _buildFilesSection()),
+            const SliverToBoxAdapter(child: SizedBox(height: 32)),
+          ],
         ),
-        slivers: [
-          SliverToBoxAdapter(child: _buildHero(info, progress)),
-          SliverToBoxAdapter(child: _buildActions()),
-          SliverToBoxAdapter(child: _buildTransferSection()),
-          SliverToBoxAdapter(child: _buildInfoSection()),
-          SliverToBoxAdapter(child: _buildFilesSection()),
-          const SliverToBoxAdapter(child: SizedBox(height: 32)),
-        ],
       ),
     );
   }
@@ -373,35 +380,35 @@ class _TorrentDetailScreenState extends State<TorrentDetailScreen> {
           ? _ActionSpec(
               icon: CupertinoIcons.play_fill,
               label: '启动',
-              color: CupertinoColors.systemGreen,
+              color: AppColors.success,
               onTap: () =>
                   _runAction(() => QBitApi().startTorrent(_hash), '已启动'),
             )
           : _ActionSpec(
               icon: CupertinoIcons.pause_fill,
               label: '暂停',
-              color: CupertinoColors.systemOrange,
+              color: AppColors.warning,
               onTap: () =>
                   _runAction(() => QBitApi().stopTorrent(_hash), '已暂停'),
             ),
       _ActionSpec(
         icon: CupertinoIcons.bolt_fill,
         label: '强制',
-        color: CupertinoColors.systemBlue,
+        color: AppColors.accent,
         onTap: () =>
             _runAction(() => QBitApi().forceStartTorrent(_hash), '已强制启动'),
       ),
       _ActionSpec(
         icon: CupertinoIcons.checkmark_shield,
         label: '校验',
-        color: CupertinoColors.systemBlue,
+        color: AppColors.accent,
         onTap: () =>
             _runAction(() => QBitApi().recheckTorrent(_hash), '已开始校验'),
       ),
       _ActionSpec(
         icon: CupertinoIcons.antenna_radiowaves_left_right,
         label: '汇报',
-        color: CupertinoColors.systemBlue,
+        color: AppColors.accent,
         onTap: () =>
             _runAction(() => QBitApi().reannounceTorrent(_hash), '已重新汇报'),
       ),
@@ -457,7 +464,7 @@ class _TorrentDetailScreenState extends State<TorrentDetailScreen> {
         _tile('已下载', _fmtSize(downloaded as num?), muted: true),
         _tile('已上传', _fmtSize(uploaded as num?), muted: true),
         _tile('分享率', ratio.toStringAsFixed(2),
-            valueColor: ratio >= 1.0 ? CupertinoColors.systemOrange : null),
+            valueColor: ratio >= 1.0 ? AppColors.warning : null),
         _tile('剩余时间', _fmtEta(eta), muted: true),
         _tile('连接 (做种 / 下载)', '$seeds / $peers', muted: true),
       ],
@@ -547,7 +554,7 @@ class _TorrentDetailScreenState extends State<TorrentDetailScreen> {
     final fprog = ((f['progress'] ?? 0.0) as num).toDouble();
     final done = fprog >= 1.0;
     final barColor =
-        done ? CupertinoColors.systemGreen : CupertinoColors.systemBlue;
+        done ? AppColors.success : AppColors.accent;
     return Column(
       children: [
         Padding(
@@ -585,7 +592,7 @@ class _TorrentDetailScreenState extends State<TorrentDetailScreen> {
                 '${(fprog * 100).toStringAsFixed(1)}%',
                 style: AppTypography.caption(
                   color: done
-                      ? CupertinoColors.systemGreen
+                      ? AppColors.success
                       : AppColors.of(AppColors.tertiaryLabel),
                 ),
               ),

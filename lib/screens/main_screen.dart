@@ -96,11 +96,11 @@ class _MainScreenState extends State<MainScreen> {
 
   // 将 qBittorrent 状态码转为 UI 文本/颜色/图标（兼容新版 stopped* / 旧版 paused*）
   Map<String, dynamic> _parseState(String state) {
-    final blue = CupertinoColors.systemBlue.resolveFrom(context);
-    final green = CupertinoColors.systemGreen.resolveFrom(context);
+    final blue = AppColors.accent.resolveFrom(context);
+    final green = AppColors.success.resolveFrom(context);
     final grey = AppColors.of(AppColors.secondaryLabel);
-    final orange = CupertinoColors.systemOrange.resolveFrom(context);
-    final red = CupertinoColors.systemRed.resolveFrom(context);
+    final orange = AppColors.warning.resolveFrom(context);
+    final red = AppColors.danger.resolveFrom(context);
     switch (state) {
       case 'downloading':
       case 'metaDL':
@@ -369,7 +369,7 @@ class _MainScreenState extends State<MainScreen> {
                 child: const Icon(
                   CupertinoIcons.add,
                   size: 28,
-                  color: CupertinoColors.systemBlue,
+                  color: AppColors.accent,
                 ),
               ),
             ],
@@ -447,7 +447,7 @@ class _MainScreenState extends State<MainScreen> {
                   height: 1.5,
                   width: selected ? 24 : 0,
                   decoration: const BoxDecoration(
-                    color: CupertinoColors.systemBlue,
+                    color: AppColors.accent,
                     borderRadius: BorderRadius.all(Radius.circular(1)),
                   ),
                 ),
@@ -696,7 +696,7 @@ class _MainScreenState extends State<MainScreen> {
   Widget _buildNavItem(int index, IconData icon, String label) {
     final isSelected = _currentIndex == index;
     final color = isSelected
-        ? CupertinoColors.systemBlue
+        ? AppColors.accent
         : AppColors.of(AppColors.secondaryLabel);
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -856,7 +856,7 @@ class _ServerSettingsPageState extends State<ServerSettingsPage> {
                 const Icon(
                   CupertinoIcons.lock_fill,
                   size: 13,
-                  color: CupertinoColors.systemGreen,
+                  color: AppColors.success,
                 ),
               ],
             ],

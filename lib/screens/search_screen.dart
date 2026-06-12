@@ -197,13 +197,13 @@ class _SearchScreenState extends State<SearchScreen> {
   ({Color color, IconData icon}) _stateInfo(String state) {
     if (['downloading', 'metaDL', 'forcedDL', 'stalledDL'].contains(state)) {
       return (
-        color: CupertinoColors.systemBlue,
+        color: AppColors.accent,
         icon: CupertinoIcons.arrow_down_circle_fill,
       );
     }
     if (['uploading', 'forcedUP', 'stalledUP'].contains(state)) {
       return (
-        color: CupertinoColors.systemGreen,
+        color: AppColors.success,
         icon: CupertinoIcons.arrow_up_circle_fill,
       );
     }
@@ -215,13 +215,13 @@ class _SearchScreenState extends State<SearchScreen> {
     }
     if (state.startsWith('checking')) {
       return (
-        color: CupertinoColors.systemOrange,
+        color: AppColors.warning,
         icon: CupertinoIcons.arrow_2_circlepath_circle_fill,
       );
     }
     if (state == 'error' || state == 'missingFiles') {
       return (
-        color: CupertinoColors.systemRed,
+        color: AppColors.danger,
         icon: CupertinoIcons.exclamationmark_circle_fill,
       );
     }
@@ -442,21 +442,21 @@ class _SearchScreenState extends State<SearchScreen> {
     spans.add(const WidgetSpan(
       alignment: PlaceholderAlignment.middle,
       child: Icon(CupertinoIcons.arrow_up,
-          size: 10, color: CupertinoColors.systemGreen),
+          size: 10, color: AppColors.success),
     ));
     spans.add(TextSpan(
       text: ' ${seeders < 0 ? '?' : seeders}',
-      style: AppTypography.caption(color: CupertinoColors.systemGreen),
+      style: AppTypography.caption(color: AppColors.success),
     ));
     addSep();
     spans.add(const WidgetSpan(
       alignment: PlaceholderAlignment.middle,
       child: Icon(CupertinoIcons.arrow_down,
-          size: 10, color: CupertinoColors.systemOrange),
+          size: 10, color: AppColors.warning),
     ));
     spans.add(TextSpan(
       text: ' ${leechers < 0 ? '?' : leechers}',
-      style: AppTypography.caption(color: CupertinoColors.systemOrange),
+      style: AppTypography.caption(color: AppColors.warning),
     ));
 
     final subtitleWidgets = <Widget>[
@@ -498,7 +498,7 @@ class _SearchScreenState extends State<SearchScreen> {
       trailing: const Icon(
         CupertinoIcons.add_circled,
         size: 22,
-        color: CupertinoColors.systemBlue,
+        color: AppColors.accent,
       ),
       onTap: () => _addResult(r),
     );

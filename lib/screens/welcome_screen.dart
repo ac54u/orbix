@@ -12,7 +12,7 @@ class WelcomeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     AppColors.watch(context);
-    final accent = CupertinoColors.systemBlue.resolveFrom(context);
+    final accent = AppColors.accent.resolveFrom(context);
     return CupertinoPageScaffold(
       backgroundColor: AppColors.of(AppColors.plainBg),
       child: SafeArea(
@@ -50,7 +50,7 @@ class WelcomeScreen extends StatelessWidget {
             gradient: const LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
-              colors: [Color(0xFF0A84FF), Color(0xFF0060DF)],
+              colors: [Color(0xFF366EF6), Color(0xFF0E52BA)],
             ),
             boxShadow: [
               BoxShadow(
@@ -106,7 +106,7 @@ class WelcomeScreen extends StatelessWidget {
 
   Widget _featureTile(IconData icon, String title, String subtitle) {
     return CupertinoListTile.notched(
-      leading: Icon(icon, color: CupertinoColors.systemBlue, size: 24),
+      leading: Icon(icon, color: AppColors.accent, size: 24),
       title: Text(
         title,
         style: AppTypography.body().copyWith(fontWeight: FontWeight.w600),

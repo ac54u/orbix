@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:get/get.dart';
 
 import 'screens/splash_screen.dart';
+import 'theme/app_colors.dart';
 
 void main() {
   runApp(const OrbixApp());
@@ -18,8 +19,8 @@ class OrbixApp extends StatelessWidget {
       // light/dark/themeMode 三件套——一锤定音 brightness: dark。
       theme: CupertinoThemeData(
         brightness: Brightness.dark,
-        primaryColor: CupertinoColors.systemBlue,
-        scaffoldBackgroundColor: Color(0xFF000000),
+        primaryColor: AppColors.accent,
+        scaffoldBackgroundColor: AppColors.mainBg,
       ),
       defaultTransition: Transition.cupertino,
       popGesture: true,
