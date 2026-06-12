@@ -168,8 +168,14 @@ class _TorrentDetailScreenState extends State<TorrentDetailScreen> {
           color: AppColors.of(AppColors.secondaryLabel),
           icon: CupertinoIcons.time,
         );
-      case 'error':
       case 'missingFiles':
+        // 文件丢失：磁盘上找不到任务文件，与一般错误区分，给出更准确的标签。
+        return (
+          text: '文件丢失',
+          color: AppColors.danger,
+          icon: CupertinoIcons.exclamationmark_triangle_fill,
+        );
+      case 'error':
         return (
           text: '错误',
           color: AppColors.danger,
@@ -283,6 +289,8 @@ class _TorrentDetailScreenState extends State<TorrentDetailScreen> {
           slivers: [
             SliverToBoxAdapter(child: _buildHero(info, progress)),
             SliverToBoxAdapter(child: _buildActions()),
+            SliverToBoxAdapter(
+                child: _buildErrorHint((_t['state'] ?? '').toString())),
             SliverToBoxAdapter(child: _buildTransferSection()),
             SliverToBoxAdapter(child: _buildInfoSection()),
             SliverToBoxAdapter(child: _buildFilesSection()),
@@ -369,6 +377,60 @@ class _TorrentDetailScreenState extends State<TorrentDetailScreen> {
             ],
           ),
         ],
+      ),
+    );
+  }
+
+  // 错误/文件丢失时的解释卡：说明可能原因 + 建议操作；其它状态不显示。
+  Widget _buildErrorHint(String state) {
+    final isMissing = state == 'missingFiles';
+    if (state != 'error' && !isMissing) return const SizedBox.shrink();
+    final title = isMissing ? '文件丢失' : '任务出错';
+    final body = isMissing
+        ? 'qBittorrent 在磁盘上找不到该任务的文件。常见原因：文件被移动 / 重命名 / 删除，或保存所在的磁盘、网络存储未挂载。\n\n若文件其实还在原处，点上方「校验」即可恢复；若确已删除，则需重新下载。'
+        : '任务进入错误状态。常见原因：磁盘空间不足、保存路径不可写或磁盘掉线、文件被占用，或 Tracker / IO 异常。\n\n建议先检查服务器磁盘与保存路径，再点上方「校验」，或重新「启动」任务。';
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 6, 16, 2),
+      child: Container(
+        decoration: BoxDecoration(
+          color: AppColors.of(AppColors.card),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        padding: const EdgeInsets.all(14),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(
+              isMissing
+                  ? CupertinoIcons.exclamationmark_triangle_fill
+                  : CupertinoIcons.exclamationmark_circle_fill,
+              color: AppColors.danger,
+              size: 20,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: AppTypography.body().copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.danger.resolveFrom(context),
+                    ),
+                  ),
+                  const SizedBox(height: 5),
+                  Text(
+                    body,
+                    style: AppTypography.subtitle(
+                      color: AppColors.of(AppColors.secondaryLabel),
+                    ).copyWith(height: 1.4),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

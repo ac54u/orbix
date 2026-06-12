@@ -133,8 +133,9 @@ class _MainScreenState extends State<MainScreen> {
       case 'queuedDL':
       case 'queuedUP':
         return {"text": "排队中", "color": grey, "icon": CupertinoIcons.time};
-      case 'error':
       case 'missingFiles':
+        return {"text": "文件丢失", "color": red, "icon": CupertinoIcons.exclamationmark_triangle_fill};
+      case 'error':
         return {"text": "错误", "color": red, "icon": CupertinoIcons.exclamationmark_circle_fill};
       default:
         return {"text": state, "color": grey, "icon": CupertinoIcons.circle};
@@ -182,128 +183,13 @@ class _MainScreenState extends State<MainScreen> {
     }
   }
 
-  // —— 长按种子的操作菜单 ——
-
-  bool _isPaused(String state) =>
-      state.startsWith('stopped') || state.startsWith('paused');
-
-  /// 长按种子行 → 原生 ActionSheet（启动/暂停、强制启动、校验、汇报、删除）。
-  ///
-  /// 不再用 `CupertinoContextMenu`：它内部自带 TapGestureRecognizer 抢点击，
-  /// 与外层 onTap 在手势竞技场里竞争，导致「点击详情偶尔无反应」。改为
-  /// 由行自身的 GestureDetector 独占 onTap/onLongPress，点击 100% 可靠。
-  void _showTorrentActions(String hash, String name, String state) {
-    final paused = _isPaused(state);
-    void run(Future<bool> Function() action, String ok) {
-      Navigator.pop(context);
-      _runAction(action, ok);
-    }
-
-    showCupertinoModalPopup<void>(
-      context: context,
-      builder: (ctx) => CupertinoActionSheet(
-        title: Text(name, maxLines: 2, overflow: TextOverflow.ellipsis),
-        actions: [
-          if (paused)
-            CupertinoActionSheetAction(
-              onPressed: () => run(() => QBitApi().startTorrent(hash), '已启动'),
-              child: const Text('启动'),
-            )
-          else
-            CupertinoActionSheetAction(
-              onPressed: () => run(() => QBitApi().stopTorrent(hash), '已暂停'),
-              child: const Text('暂停'),
-            ),
-          CupertinoActionSheetAction(
-            onPressed: () =>
-                run(() => QBitApi().forceStartTorrent(hash), '已强制启动'),
-            child: const Text('强制启动'),
-          ),
-          CupertinoActionSheetAction(
-            onPressed: () =>
-                run(() => QBitApi().recheckTorrent(hash), '已开始重新校验'),
-            child: const Text('强制重新校验'),
-          ),
-          CupertinoActionSheetAction(
-            onPressed: () =>
-                run(() => QBitApi().reannounceTorrent(hash), '已重新汇报'),
-            child: const Text('强制重新汇报'),
-          ),
-          CupertinoActionSheetAction(
-            isDestructiveAction: true,
-            onPressed: () {
-              Navigator.pop(ctx);
-              _confirmDelete(hash, name);
-            },
-            child: const Text('删除'),
-          ),
-        ],
-        cancelButton: CupertinoActionSheetAction(
-          onPressed: () => Navigator.pop(ctx),
-          child: const Text('取消'),
-        ),
-      ),
-    );
-  }
-
-  // 删除二次确认：居中弹窗，可选择是否连同文件一起删
-  void _confirmDelete(String hash, String name) {
-    showCupertinoDialog<void>(
-      context: context,
-      builder: (ctx) => CupertinoAlertDialog(
-        title: const Text('删除任务'),
-        content: Padding(
-          padding: const EdgeInsets.only(top: 8),
-          child: Text(name, maxLines: 3, overflow: TextOverflow.ellipsis),
-        ),
-        actions: [
-          CupertinoDialogAction(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('取消'),
-          ),
-          CupertinoDialogAction(
-            onPressed: () {
-              Navigator.pop(ctx);
-              _runAction(
-                  () => QBitApi().deleteTorrent(hash, deleteFiles: false),
-                  '已删除任务（保留文件）');
-            },
-            child: const Text('仅删任务'),
-          ),
-          CupertinoDialogAction(
-            isDestructiveAction: true,
-            onPressed: () {
-              Navigator.pop(ctx);
-              _runAction(
-                  () => QBitApi().deleteTorrent(hash, deleteFiles: true),
-                  '已删除任务和文件');
-            },
-            child: const Text('删任务和文件'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // 点按卡片 → 打开详情页；返回后刷新列表（详情页可能已删除/改动该任务）
+  // 点按卡片 → 打开详情页；返回后刷新列表（详情页可能已删除/改动该任务）。
+  // 卡片不再长按弹操作菜单——所有操作都在详情页内，点进去即可。
   Future<void> _openDetail(dynamic t) async {
     if (t is! Map) return;
     final map = Map<String, dynamic>.from(t);
     await Get.to(() => TorrentDetailScreen(torrent: map));
     if (mounted) _fetchData();
-  }
-
-  // 执行操作 → 立即刷新 → 反馈
-  Future<void> _runAction(Future<bool> Function() action, String okMsg) async {
-    final ok = await action();
-    if (!mounted) return;
-    await _fetchData(); // 操作后立刻刷新列表
-    if (!mounted) return;
-    _toast(ok ? okMsg : '操作失败，请重试', ok: ok);
-  }
-
-  void _toast(String msg, {required bool ok}) {
-    Toast.show(context, msg, type: ok ? ToastType.success : ToastType.error);
   }
 
   @override
@@ -649,8 +535,6 @@ class _MainScreenState extends State<MainScreen> {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: hash.isEmpty ? null : () => _openDetail(t),
-      onLongPress:
-          hash.isEmpty ? null : () => _showTorrentActions(hash, name, rawState),
       child: row,
     );
   }

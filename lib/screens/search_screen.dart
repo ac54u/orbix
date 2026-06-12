@@ -219,7 +219,13 @@ class _SearchScreenState extends State<SearchScreen> {
         icon: CupertinoIcons.arrow_2_circlepath_circle_fill,
       );
     }
-    if (state == 'error' || state == 'missingFiles') {
+    if (state == 'missingFiles') {
+      return (
+        color: AppColors.danger,
+        icon: CupertinoIcons.exclamationmark_triangle_fill,
+      );
+    }
+    if (state == 'error') {
       return (
         color: AppColors.danger,
         icon: CupertinoIcons.exclamationmark_circle_fill,
