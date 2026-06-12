@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:path_provider/path_provider.dart';
 
 /// 一个可安装的 release（从 GitHub Releases 解析而来）。
 class AppRelease {
@@ -54,12 +55,12 @@ class UpdateCheck {
   });
 }
 
-/// App 自更新：查 GitHub Releases → 比对版本 → 交给 TrollStore 安装。
+/// App 自更新：查 GitHub Releases → 比对版本 → App 内下载 ipa → 交给 TrollStore。
 ///
-/// iOS 沙盒禁止 App 静默安装 ipa，但 TrollStore（1.3+）劫持了系统
-/// `apple-magnifier://` scheme，`install?url=<ipa>` 会让 TrollStore
-/// 自行下载并永久安装。因此本服务只负责「发现新版 + 把 ipa 直链交给
-/// TrollStore」，不自己下载二进制。
+/// 早期方案依赖 `apple-magnifier://install?url=` scheme，但该 scheme 易被系统
+/// 「放大器」App 抢注，导致点更新跳进放大器。现改为：本服务直接把 ipa 下载到
+/// 临时目录，UI 层再唤起 iOS 原生分享面板，由用户选「拷贝到 TrollStore」安装，
+/// 全程不依赖任何 URL scheme。
 class UpdateService {
   UpdateService._();
   static final UpdateService instance = UpdateService._();
@@ -72,10 +73,6 @@ class UpdateService {
     receiveTimeout: const Duration(seconds: 8),
     headers: {'Accept': 'application/vnd.github+json'},
   ));
-
-  /// 拼出 TrollStore 安装链接。打开它即触发 TrollStore 下载+安装该 ipa。
-  static String trollStoreInstallUrl(String ipaUrl) =>
-      'apple-magnifier://install?url=${Uri.encodeComponent(ipaUrl)}';
 
   /// 比较两个版本号：a>b 返回正、a<b 返回负、相等返回 0。
   /// 按 `.`/`-`/`+` 拆段逐段比数字，容错前缀 v 与非数字段。
@@ -157,6 +154,27 @@ class UpdateService {
       return UpdateCheck(
           hasUpdate: false, currentVersion: current, error: '检查更新失败');
     }
+  }
+
+  /// 把 release 的 .ipa 下载到临时目录，返回本地文件路径。
+  /// [onProgress] 回传 (已收字节, 总字节)；总字节未知时 total 为 -1。
+  /// 走独立 receiveTimeout=0（不限时），避免大文件被 8s 超时打断。
+  Future<String> downloadIpa(
+    AppRelease rel, {
+    required void Function(int received, int total) onProgress,
+    CancelToken? cancelToken,
+  }) async {
+    final dir = await getTemporaryDirectory();
+    final safeTag = rel.tag.replaceAll(RegExp(r'[^\w.\-]'), '_');
+    final path = '${dir.path}/Orbix-$safeTag.ipa';
+    await _dio.download(
+      rel.ipaUrl,
+      path,
+      cancelToken: cancelToken,
+      onReceiveProgress: onProgress,
+      options: Options(receiveTimeout: Duration.zero),
+    );
+    return path;
   }
 
   /// 从 assets 数组里挑第一个 `.ipa`。
