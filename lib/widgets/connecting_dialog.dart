@@ -1,12 +1,14 @@
 import 'dart:ui';
 
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
+import '../theme/app_motion.dart';
+import '../theme/app_typography.dart';
 
-/// 统一的「连接中」遮罩：磨砂玻璃质感 + 渐入缩放动画，随系统明暗自适应。
-/// 用 rootNavigator 弹出，关闭时 `Navigator.of(context, rootNavigator: true).pop()`。
+/// 统一的「连接中」遮罩：磨砂玻璃 + 渐入缩放动画。
+///
+/// 用 rootNavigator 弹出；关闭：`Navigator.of(context, rootNavigator: true).pop()`。
 Future<void> showConnectingDialog(BuildContext context, {String text = '连接中…'}) {
   return showCupertinoDialog<void>(
     context: context,
@@ -21,14 +23,11 @@ class _ConnectingDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    AppColors.watch(context); // 随明暗即时重建
-    final dark = MediaQuery.platformBrightnessOf(context) == Brightness.dark;
-    final surface = (dark ? const Color(0xFF1C1C1E) : Colors.white);
-
+    AppColors.watch(context);
     return Center(
       child: TweenAnimationBuilder<double>(
-        duration: const Duration(milliseconds: 240),
-        curve: Curves.easeOutCubic,
+        duration: AppMotion.fast,
+        curve: AppMotion.standard,
         tween: Tween(begin: 0.0, end: 1.0),
         builder: (context, t, child) => Opacity(
           opacity: t.clamp(0.0, 1.0),
@@ -42,15 +41,16 @@ class _ConnectingDialog extends StatelessWidget {
               width: 152,
               padding: const EdgeInsets.symmetric(vertical: 30, horizontal: 24),
               decoration: BoxDecoration(
-                color: surface.withOpacity(dark ? 0.62 : 0.80),
+                color:
+                    AppColors.of(AppColors.card).withValues(alpha: 0.62),
                 borderRadius: BorderRadius.circular(24),
                 border: Border.all(
-                  color: Colors.white.withOpacity(dark ? 0.10 : 0.55),
+                  color: CupertinoColors.white.withValues(alpha: 0.10),
                   width: 0.6,
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(dark ? 0.45 : 0.18),
+                    color: CupertinoColors.black.withValues(alpha: 0.45),
                     blurRadius: 30,
                     spreadRadius: 2,
                     offset: const Offset(0, 12),
@@ -64,11 +64,9 @@ class _ConnectingDialog extends StatelessWidget {
                   const SizedBox(height: 16),
                   Text(
                     text,
-                    style: TextStyle(
-                      fontSize: 14,
+                    style: AppTypography.subtitle().copyWith(
                       fontWeight: FontWeight.w600,
                       letterSpacing: 0.3,
-                      color: AppColors.of(AppColors.secondaryLabel),
                     ),
                   ),
                 ],

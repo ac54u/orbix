@@ -1,14 +1,19 @@
 import 'dart:async';
+
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+
 import '../services/qbit_api.dart';
 import '../theme/app_colors.dart';
+import '../theme/app_typography.dart';
+import '../widgets/toast.dart';
 
 /// 种子详情页：点击列表卡片进入。
-/// 展示状态、进度、传输统计、属性与文件列表，并提供常用操作。
+///
+/// 头部 Hero（百分比 + 状态 + 2pt 进度线 + 上下行速度），下方 inset grouped
+/// 分组：传输 / 信息 / 文件。每 2 秒自动刷新。
 class TorrentDetailScreen extends StatefulWidget {
-  final Map<String, dynamic> torrent; // 进入时的快照，先渲染再轮询更新
+  final Map<String, dynamic> torrent;
   const TorrentDetailScreen({super.key, required this.torrent});
 
   @override
@@ -20,8 +25,6 @@ class _TorrentDetailScreenState extends State<TorrentDetailScreen> {
   Map<String, dynamic> _props = {};
   List<dynamic> _files = [];
   Timer? _timer;
-
-  static const Color _accent = Color(0xFF007AFF);
 
   String get _hash => (_t['hash'] ?? '').toString();
 
@@ -92,9 +95,9 @@ class _TorrentDetailScreenState extends State<TorrentDetailScreen> {
     final d = seconds ~/ 86400;
     final h = (seconds % 86400) ~/ 3600;
     final m = (seconds % 3600) ~/ 60;
-    if (d > 0) return '${d}天 ${h}小时';
-    if (h > 0) return '${h}小时 ${m}分';
-    return '${m}分';
+    if (d > 0) return '$d天 $h小时';
+    if (h > 0) return '$h小时 $m分';
+    return '$m分';
   }
 
   String _fmtDate(num? epochSeconds) {
@@ -102,45 +105,82 @@ class _TorrentDetailScreenState extends State<TorrentDetailScreen> {
     if (v <= 0) return '—';
     final dt = DateTime.fromMillisecondsSinceEpoch(v * 1000);
     String two(int n) => n.toString().padLeft(2, '0');
-    return '${dt.year}-${two(dt.month)}-${two(dt.day)} ${two(dt.hour)}:${two(dt.minute)}';
+    return '${dt.year}-${two(dt.month)}-${two(dt.day)} '
+        '${two(dt.hour)}:${two(dt.minute)}';
   }
 
-  Map<String, dynamic> _parseState(String state) {
-    const blue = Color(0xFF007AFF);
-    const green = Color(0xFF34C759);
-    const grey = Color(0xFF8E8E93);
-    const orange = Color(0xFFFF9500);
-    const red = Color(0xFFFF3B30);
+  // 状态 → text/color/icon；颜色全走 Cupertino 系统色 + AppColors 动态色。
+  ({String text, Color color, IconData icon}) _parseState(String state) {
     switch (state) {
       case 'downloading':
       case 'metaDL':
       case 'forcedDL':
-        return {'text': '下载中', 'color': blue, 'icon': CupertinoIcons.arrow_down_circle_fill};
+        return (
+          text: '下载中',
+          color: CupertinoColors.systemBlue,
+          icon: CupertinoIcons.arrow_down_circle_fill,
+        );
       case 'stalledDL':
-        return {'text': '等待下载', 'color': blue, 'icon': CupertinoIcons.arrow_down_circle};
+        return (
+          text: '等待下载',
+          color: CupertinoColors.systemBlue,
+          icon: CupertinoIcons.arrow_down_circle,
+        );
       case 'uploading':
       case 'forcedUP':
-        return {'text': '上传中', 'color': green, 'icon': CupertinoIcons.arrow_up_circle_fill};
+        return (
+          text: '上传中',
+          color: CupertinoColors.systemGreen,
+          icon: CupertinoIcons.arrow_up_circle_fill,
+        );
       case 'stalledUP':
-        return {'text': '做种中', 'color': green, 'icon': CupertinoIcons.arrow_up_circle_fill};
+        return (
+          text: '做种中',
+          color: CupertinoColors.systemGreen,
+          icon: CupertinoIcons.arrow_up_circle_fill,
+        );
       case 'pausedDL':
       case 'stoppedDL':
-        return {'text': '已暂停', 'color': grey, 'icon': CupertinoIcons.pause_circle_fill};
+        return (
+          text: '已暂停',
+          color: AppColors.of(AppColors.secondaryLabel),
+          icon: CupertinoIcons.pause_circle_fill,
+        );
       case 'pausedUP':
       case 'stoppedUP':
-        return {'text': '已完成', 'color': grey, 'icon': CupertinoIcons.checkmark_circle_fill};
+        return (
+          text: '已完成',
+          color: AppColors.of(AppColors.secondaryLabel),
+          icon: CupertinoIcons.checkmark_circle_fill,
+        );
       case 'checkingUP':
       case 'checkingDL':
       case 'checkingResumeData':
-        return {'text': '校验中', 'color': orange, 'icon': CupertinoIcons.arrow_2_circlepath_circle_fill};
+        return (
+          text: '校验中',
+          color: CupertinoColors.systemOrange,
+          icon: CupertinoIcons.arrow_2_circlepath_circle_fill,
+        );
       case 'queuedDL':
       case 'queuedUP':
-        return {'text': '排队中', 'color': grey, 'icon': CupertinoIcons.time};
+        return (
+          text: '排队中',
+          color: AppColors.of(AppColors.secondaryLabel),
+          icon: CupertinoIcons.time,
+        );
       case 'error':
       case 'missingFiles':
-        return {'text': '错误', 'color': red, 'icon': CupertinoIcons.exclamationmark_circle_fill};
+        return (
+          text: '错误',
+          color: CupertinoColors.systemRed,
+          icon: CupertinoIcons.exclamationmark_circle_fill,
+        );
       default:
-        return {'text': state, 'color': grey, 'icon': CupertinoIcons.circle};
+        return (
+          text: state,
+          color: AppColors.of(AppColors.tertiaryLabel),
+          icon: CupertinoIcons.circle,
+        );
     }
   }
 
@@ -150,7 +190,8 @@ class _TorrentDetailScreenState extends State<TorrentDetailScreen> {
   }
 
   // —— 操作 ——
-  Future<void> _runAction(Future<bool> Function() action, String okMsg) async {
+  Future<void> _runAction(
+      Future<bool> Function() action, String okMsg) async {
     final ok = await action();
     if (!mounted) return;
     await _refresh();
@@ -196,131 +237,199 @@ class _TorrentDetailScreenState extends State<TorrentDetailScreen> {
   }
 
   void _toast(String msg, {required bool ok}) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(msg),
-        backgroundColor: ok ? const Color(0xFF34C759) : const Color(0xFFFF3B30),
-        behavior: SnackBarBehavior.floating,
-        duration: const Duration(milliseconds: 1400),
-      ),
-    );
+    Toast.show(context, msg, type: ok ? ToastType.success : ToastType.error);
   }
 
   @override
   Widget build(BuildContext context) {
     AppColors.watch(context);
-    final state = (_t['state'] ?? '').toString();
-    final info = _parseState(state);
-    final Color themeColor = info['color'];
-    final progress = (_t['progress'] ?? 0.0).toDouble();
+    final info = _parseState((_t['state'] ?? '').toString());
+    final progress = ((_t['progress'] ?? 0.0) as num).toDouble();
 
-    return Scaffold(
+    return CupertinoPageScaffold(
       backgroundColor: AppColors.of(AppColors.groupedBg),
-      appBar: AppBar(
-        backgroundColor: AppColors.of(AppColors.groupedBg),
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        centerTitle: true,
-        leading: CupertinoButton(
-          padding: EdgeInsets.zero,
-          onPressed: () => Get.back(),
-          child: const Icon(CupertinoIcons.back, color: _accent),
-        ),
-        title: Text('任务详情',
-            style: TextStyle(
-                color: AppColors.of(AppColors.label),
-                fontSize: 17,
-                fontWeight: FontWeight.w600)),
-        actions: [
-          CupertinoButton(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            onPressed: _confirmDelete,
-            child: const Icon(CupertinoIcons.delete, color: Color(0xFFFF3B30), size: 22),
+      navigationBar: CupertinoNavigationBar(
+        backgroundColor:
+            AppColors.of(AppColors.groupedBg).withValues(alpha: 0.85),
+        border: Border(
+          bottom: BorderSide(
+            color: AppColors.of(AppColors.separator),
+            width: 0.0, // 让系统按设备像素绘 hairline
           ),
-        ],
-      ),
-      body: SafeArea(
-        top: false,
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-          children: [
-            _header(info, themeColor, progress),
-            const SizedBox(height: 20),
-            _actionsBar(),
-            const SizedBox(height: 20),
-            _sectionTitle('传输'),
-            _transferCard(),
-            const SizedBox(height: 20),
-            _sectionTitle('信息'),
-            _infoCard(),
-            const SizedBox(height: 20),
-            _sectionTitle('文件 (${_files.length})'),
-            _filesCard(),
-          ],
         ),
+        previousPageTitle: '种子',
+        middle: Text('任务详情', style: AppTypography.navTitle()),
+        trailing: CupertinoButton(
+          padding: EdgeInsets.zero,
+          minimumSize: Size.zero,
+          onPressed: _confirmDelete,
+          child: const Icon(
+            CupertinoIcons.delete,
+            color: CupertinoColors.systemRed,
+            size: 22,
+          ),
+        ),
+      ),
+      child: CustomScrollView(
+        physics: const BouncingScrollPhysics(
+          parent: AlwaysScrollableScrollPhysics(),
+        ),
+        slivers: [
+          SliverToBoxAdapter(child: _buildHero(info, progress)),
+          SliverToBoxAdapter(child: _buildActions()),
+          SliverToBoxAdapter(child: _buildTransferSection()),
+          SliverToBoxAdapter(child: _buildInfoSection()),
+          SliverToBoxAdapter(child: _buildFilesSection()),
+          const SliverToBoxAdapter(child: SizedBox(height: 32)),
+        ],
       ),
     );
   }
 
-  Widget _header(Map<String, dynamic> info, Color themeColor, double progress) {
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: AppColors.of(AppColors.card),
-        borderRadius: BorderRadius.circular(18),
-      ),
+  // —— Hero：名称 + 大百分比 + 状态 + 2pt 进度 + 速度脚注 ——
+  Widget _buildHero(
+      ({String text, Color color, IconData icon}) info, double progress) {
+    final pct = (progress * 100).toStringAsFixed(1);
+    final dl = (_t['dlspeed'] ?? 0) as int;
+    final up = (_t['upspeed'] ?? 0) as int;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 24, 20, 28),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // 名称
+          Text(
+            (_t['name'] ?? '未知任务').toString(),
+            textAlign: TextAlign.center,
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
+            style: AppTypography.body().copyWith(
+              fontSize: 15,
+              fontWeight: FontWeight.w500,
+              color: AppColors.of(AppColors.secondaryLabel),
+              height: 1.35,
+            ),
+          ),
+          const SizedBox(height: 22),
+          // 大百分比：使用 themeColor 着色，配 hero 字重
+          Text(
+            '$pct%',
+            style: AppTypography.hero(color: info.color),
+          ),
+          const SizedBox(height: 8),
+          // 状态行：图标 + 文本
           Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(info['icon'], color: themeColor, size: 30),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  (_t['name'] ?? '未知任务').toString(),
-                  style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.of(AppColors.label)),
+              Icon(info.icon, size: 14, color: info.color),
+              const SizedBox(width: 6),
+              Text(
+                info.text,
+                style: AppTypography.subtitle(color: info.color).copyWith(
+                  fontWeight: FontWeight.w500,
                 ),
               ),
             ],
           ),
+          const SizedBox(height: 20),
+          // 2pt 极细进度线（与种子行 / 文件行同构，方端无圆头，Tesla 风冷峻）
+          SizedBox(
+            height: 2,
+            child: Stack(
+              children: [
+                Container(color: AppColors.of(AppColors.separator)),
+                FractionallySizedBox(
+                  alignment: Alignment.centerLeft,
+                  widthFactor: progress.clamp(0.0, 1.0),
+                  child: Container(color: info.color),
+                ),
+              ],
+            ),
+          ),
           const SizedBox(height: 16),
+          // 速度脚注
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Text('${(progress * 100).toStringAsFixed(1)}%',
-                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: themeColor)),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                    color: themeColor.withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(10)),
-                child: Text(info['text'],
-                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: themeColor)),
-              ),
+              Icon(CupertinoIcons.arrow_down,
+                  size: 11, color: AppColors.of(AppColors.tertiaryLabel)),
+              const SizedBox(width: 4),
+              Text(_fmtSpeed(dl), style: AppTypography.caption()),
+              const SizedBox(width: 28),
+              Icon(CupertinoIcons.arrow_up,
+                  size: 11, color: AppColors.of(AppColors.tertiaryLabel)),
+              const SizedBox(width: 4),
+              Text(_fmtSpeed(up), style: AppTypography.caption()),
             ],
           ),
-          const SizedBox(height: 8),
-          LayoutBuilder(
-            builder: (context, c) => Container(
-              height: 6,
-              width: c.maxWidth,
-              decoration: BoxDecoration(
-                  color: AppColors.of(AppColors.separator),
-                  borderRadius: BorderRadius.circular(3)),
-              child: Row(
-                children: [
-                  Container(
-                    width: c.maxWidth * progress.clamp(0.0, 1.0),
-                    decoration: BoxDecoration(
-                        color: themeColor, borderRadius: BorderRadius.circular(3)),
-                  ),
-                ],
-              ),
+        ],
+      ),
+    );
+  }
+
+  // —— 操作栏：4 个裸按钮，无底色 ——
+  Widget _buildActions() {
+    final actions = <_ActionSpec>[
+      _isPaused
+          ? _ActionSpec(
+              icon: CupertinoIcons.play_fill,
+              label: '启动',
+              color: CupertinoColors.systemGreen,
+              onTap: () =>
+                  _runAction(() => QBitApi().startTorrent(_hash), '已启动'),
+            )
+          : _ActionSpec(
+              icon: CupertinoIcons.pause_fill,
+              label: '暂停',
+              color: CupertinoColors.systemOrange,
+              onTap: () =>
+                  _runAction(() => QBitApi().stopTorrent(_hash), '已暂停'),
+            ),
+      _ActionSpec(
+        icon: CupertinoIcons.bolt_fill,
+        label: '强制',
+        color: CupertinoColors.systemBlue,
+        onTap: () =>
+            _runAction(() => QBitApi().forceStartTorrent(_hash), '已强制启动'),
+      ),
+      _ActionSpec(
+        icon: CupertinoIcons.checkmark_shield,
+        label: '校验',
+        color: CupertinoColors.systemBlue,
+        onTap: () =>
+            _runAction(() => QBitApi().recheckTorrent(_hash), '已开始校验'),
+      ),
+      _ActionSpec(
+        icon: CupertinoIcons.antenna_radiowaves_left_right,
+        label: '汇报',
+        color: CupertinoColors.systemBlue,
+        onTap: () =>
+            _runAction(() => QBitApi().reannounceTorrent(_hash), '已重新汇报'),
+      ),
+    ];
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: Row(
+        children: actions
+            .map((a) => Expanded(child: _buildActionButton(a)))
+            .toList(),
+      ),
+    );
+  }
+
+  Widget _buildActionButton(_ActionSpec a) {
+    return CupertinoButton(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      minimumSize: Size.zero,
+      onPressed: a.onTap,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(a.icon, size: 22, color: a.color),
+          const SizedBox(height: 6),
+          Text(
+            a.label,
+            style: AppTypography.caption(
+              color: AppColors.of(AppColors.secondaryLabel),
             ),
           ),
         ],
@@ -328,84 +437,38 @@ class _TorrentDetailScreenState extends State<TorrentDetailScreen> {
     );
   }
 
-  Widget _actionsBar() {
-    return Row(
-      children: [
-        if (_isPaused)
-          _actionButton(CupertinoIcons.play_fill, '启动', _accent,
-              () => _runAction(() => QBitApi().startTorrent(_hash), '已启动'))
-        else
-          _actionButton(CupertinoIcons.pause_fill, '暂停', const Color(0xFFFF9500),
-              () => _runAction(() => QBitApi().stopTorrent(_hash), '已暂停')),
-        const SizedBox(width: 12),
-        _actionButton(CupertinoIcons.bolt_fill, '强制', const Color(0xFF34C759),
-            () => _runAction(() => QBitApi().forceStartTorrent(_hash), '已强制启动')),
-        const SizedBox(width: 12),
-        _actionButton(CupertinoIcons.checkmark_shield, '校验', const Color(0xFF8E8E93),
-            () => _runAction(() => QBitApi().recheckTorrent(_hash), '已开始校验')),
-        const SizedBox(width: 12),
-        _actionButton(CupertinoIcons.antenna_radiowaves_left_right, '汇报', const Color(0xFF5AC8FA),
-            () => _runAction(() => QBitApi().reannounceTorrent(_hash), '已重新汇报')),
-      ],
-    );
-  }
-
-  Widget _actionButton(IconData icon, String label, Color color, VoidCallback onTap) {
-    return Expanded(
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          decoration: BoxDecoration(
-            color: AppColors.of(AppColors.card),
-            borderRadius: BorderRadius.circular(14),
-          ),
-          child: Column(
-            children: [
-              Icon(icon, color: color, size: 22),
-              const SizedBox(height: 6),
-              Text(label,
-                  style: TextStyle(
-                      fontSize: 11, color: AppColors.of(AppColors.secondaryLabel))),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _sectionTitle(String t) => Padding(
-        padding: const EdgeInsets.only(left: 4, bottom: 8),
-        child: Text(t,
-            style: TextStyle(
-                fontSize: 13, color: AppColors.of(AppColors.secondaryLabel))),
-      );
-
-  Widget _transferCard() {
+  // —— 传输 ——
+  Widget _buildTransferSection() {
     final dl = (_t['dlspeed'] ?? 0) as int;
     final up = (_t['upspeed'] ?? 0) as int;
     final downloaded = _t['downloaded'] ?? _props['total_downloaded'];
     final uploaded = _t['uploaded'] ?? _props['total_uploaded'];
-    final ratio = (_t['ratio'] ?? _props['share_ratio'] ?? 0.0).toDouble();
+    final ratio =
+        ((_t['ratio'] ?? _props['share_ratio'] ?? 0.0) as num).toDouble();
     final eta = (_t['eta'] ?? 8640000) as int;
     final seeds = _t['num_seeds'] ?? _props['seeds'] ?? 0;
     final peers = _t['num_leechs'] ?? _props['peers'] ?? 0;
 
-    return _cardOf([
-      _row('下载速度', _fmtSpeed(dl)),
-      _row('上传速度', _fmtSpeed(up)),
-      _row('已下载', _fmtSize(downloaded as num?)),
-      _row('已上传', _fmtSize(uploaded as num?)),
-      _row('分享率', ratio.toStringAsFixed(2)),
-      _row('剩余时间', _fmtEta(eta)),
-      _row('连接 (做种/下载)', '$seeds / $peers'),
-    ]);
+    return CupertinoListSection.insetGrouped(
+      header: Text('传输', style: AppTypography.sectionHeader()),
+      children: [
+        _tile('下载速度', _fmtSpeed(dl)),
+        _tile('上传速度', _fmtSpeed(up)),
+        _tile('已下载', _fmtSize(downloaded as num?), muted: true),
+        _tile('已上传', _fmtSize(uploaded as num?), muted: true),
+        _tile('分享率', ratio.toStringAsFixed(2),
+            valueColor: ratio >= 1.0 ? CupertinoColors.systemOrange : null),
+        _tile('剩余时间', _fmtEta(eta), muted: true),
+        _tile('连接 (做种 / 下载)', '$seeds / $peers', muted: true),
+      ],
+    );
   }
 
-  Widget _infoCard() {
+  // —— 信息（长字段如路径 / Hash 走 mono subtitle）——
+  Widget _buildInfoSection() {
     final size = _t['total_size'] ?? _t['size'];
-    final savePath = (_t['save_path'] ?? _props['save_path'] ?? '—').toString();
+    final savePath =
+        (_t['save_path'] ?? _props['save_path'] ?? '—').toString();
     final category = (_t['category'] ?? '').toString();
     final tags = (_t['tags'] ?? '').toString();
     final addedOn = _t['added_on'] ?? _props['addition_date'];
@@ -413,118 +476,188 @@ class _TorrentDetailScreenState extends State<TorrentDetailScreen> {
     final elapsed = (_props['time_elapsed'] ?? 0) as int;
     final seedingTime = (_props['seeding_time'] ?? 0) as int;
 
-    return _cardOf([
-      _row('总大小', _fmtSize(size as num?)),
-      _row('保存路径', savePath, mono: true),
-      if (category.isNotEmpty) _row('分类', category),
-      if (tags.isNotEmpty) _row('标签', tags),
-      _row('添加时间', _fmtDate(addedOn as num?)),
-      _row('完成时间', _fmtDate(completionOn as num?)),
-      _row('活动时长', _fmtDuration(elapsed)),
-      _row('做种时长', _fmtDuration(seedingTime)),
-      _row('Hash', _hash, mono: true),
-    ]);
-  }
-
-  Widget _filesCard() {
-    if (_files.isEmpty) {
-      return _cardOf([
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          child: Center(
-            child: Text('暂无文件信息',
-                style: TextStyle(
-                    fontSize: 13, color: AppColors.of(AppColors.secondaryLabel))),
-          ),
-        ),
-      ]);
-    }
-    final rows = <Widget>[];
-    for (var i = 0; i < _files.length; i++) {
-      final f = _files[i] as Map;
-      final name = (f['name'] ?? '').toString().split('/').last;
-      final fsize = f['size'] as num?;
-      final fprog = (f['progress'] ?? 0.0).toDouble();
-      rows.add(Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(name,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                          fontSize: 14, color: AppColors.of(AppColors.label))),
-                ),
-                const SizedBox(width: 8),
-                Text(_fmtSize(fsize),
-                    style: TextStyle(
-                        fontSize: 12, color: AppColors.of(AppColors.secondaryLabel))),
-              ],
-            ),
-            const SizedBox(height: 6),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(2),
-              child: LinearProgressIndicator(
-                value: fprog.clamp(0.0, 1.0),
-                minHeight: 4,
-                backgroundColor: AppColors.of(AppColors.separator),
-                valueColor: AlwaysStoppedAnimation(
-                    fprog >= 1.0 ? const Color(0xFF34C759) : _accent),
-              ),
-            ),
-          ],
-        ),
-      ));
-      if (i != _files.length - 1) {
-        rows.add(Container(
-            height: 0.5,
-            color: AppColors.of(AppColors.separator),
-            margin: const EdgeInsets.only(left: 16)));
-      }
-    }
-    return _cardOf(rows, padded: false);
-  }
-
-  Widget _cardOf(List<Widget> children, {bool padded = true}) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.of(AppColors.card),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      clipBehavior: Clip.antiAlias,
-      padding: padded ? const EdgeInsets.symmetric(horizontal: 16, vertical: 4) : null,
-      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: children),
+    return CupertinoListSection.insetGrouped(
+      header: Text('信息', style: AppTypography.sectionHeader()),
+      children: [
+        _tile('总大小', _fmtSize(size as num?)),
+        _monoTile('保存路径', savePath),
+        if (category.isNotEmpty) _tile('分类', category),
+        if (tags.isNotEmpty) _tile('标签', tags),
+        _tile('添加时间', _fmtDate(addedOn as num?), muted: true),
+        _tile('完成时间', _fmtDate(completionOn as num?), muted: true),
+        _tile('活动时长', _fmtDuration(elapsed), muted: true),
+        _tile('做种时长', _fmtDuration(seedingTime), muted: true),
+        _monoTile('Hash', _hash),
+      ],
     );
   }
 
-  Widget _row(String label, String value, {bool mono = false}) {
+  // —— 文件：单 inset 容器 + 每行底部 2pt 极细进度（同主屏种子行的形态）——
+  Widget _buildFilesSection() {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 10),
-      child: Row(
+      padding: const EdgeInsets.only(top: 22, bottom: 4),
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label,
-              style: TextStyle(
-                  fontSize: 14, color: AppColors.of(AppColors.secondaryLabel))),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Text(
-              value,
-              textAlign: TextAlign.right,
-              style: TextStyle(
-                fontSize: 14,
-                color: AppColors.of(AppColors.label),
-                fontWeight: FontWeight.w500,
-                fontFamily: mono ? 'monospace' : null,
+          Padding(
+            padding: const EdgeInsets.fromLTRB(36, 0, 20, 8),
+            child: Text('文件 (${_files.length})',
+                style: AppTypography.sectionHeader()),
+          ),
+          if (_files.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 16, vertical: 20),
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 22),
+                decoration: BoxDecoration(
+                  color: AppColors.of(AppColors.card),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Center(
+                  child: Text('暂无文件信息',
+                      style: AppTypography.subtitle(
+                          color: AppColors.of(AppColors.tertiaryLabel))),
+                ),
+              ),
+            )
+          else
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 16),
+              decoration: BoxDecoration(
+                color: AppColors.of(AppColors.card),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              clipBehavior: Clip.hardEdge,
+              child: Column(
+                children: List.generate(
+                  _files.length,
+                  (i) => _buildFileRow(_files[i] as Map),
+                ),
               ),
             ),
-          ),
         ],
       ),
     );
   }
+
+  Widget _buildFileRow(Map f) {
+    final name = (f['name'] ?? '').toString().split('/').last;
+    final fsize = f['size'] as num?;
+    final fprog = ((f['progress'] ?? 0.0) as num).toDouble();
+    final done = fprog >= 1.0;
+    final barColor =
+        done ? CupertinoColors.systemGreen : CupertinoColors.systemBlue;
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Text(
+                      name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTypography.body().copyWith(
+                        fontSize: 14,
+                        height: 1.3,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Text(
+                      _fmtSize(fsize),
+                      style: AppTypography.caption(
+                          color: AppColors.of(AppColors.tertiaryLabel)),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                '${(fprog * 100).toStringAsFixed(1)}%',
+                style: AppTypography.caption(
+                  color: done
+                      ? CupertinoColors.systemGreen
+                      : AppColors.of(AppColors.tertiaryLabel),
+                ),
+              ),
+            ],
+          ),
+        ),
+        SizedBox(
+          height: 2,
+          child: Stack(
+            children: [
+              Container(color: AppColors.of(AppColors.separator)),
+              FractionallySizedBox(
+                alignment: Alignment.centerLeft,
+                widthFactor: fprog.clamp(0.0, 1.0),
+                child: Container(color: barColor),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  // —— 通用键值 tile：value 短，走 additionalInfo ——
+  Widget _tile(
+    String label,
+    String value, {
+    Color? valueColor,
+    bool muted = false,
+  }) {
+    return CupertinoListTile(
+      title: Text(label, style: AppTypography.body()),
+      additionalInfo: Text(
+        value,
+        style: AppTypography.subtitle(
+          color: valueColor ??
+              (muted
+                  ? AppColors.of(AppColors.tertiaryLabel)
+                  : AppColors.of(AppColors.label)),
+        ).copyWith(fontWeight: FontWeight.w500),
+      ),
+    );
+  }
+
+  // —— 长字段（路径 / Hash）：value 走 subtitle 占满一行 + 等宽字体 ——
+  Widget _monoTile(String label, String value) {
+    return CupertinoListTile(
+      title: Text(label, style: AppTypography.body()),
+      subtitle: Padding(
+        padding: const EdgeInsets.only(top: 2),
+        child: Text(
+          value,
+          style: AppTypography.caption(
+            color: AppColors.of(AppColors.tertiaryLabel),
+          ).copyWith(fontFamily: 'Menlo'),
+          maxLines: 3,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ),
+    );
+  }
+}
+
+class _ActionSpec {
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+  const _ActionSpec({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.onTap,
+  });
 }

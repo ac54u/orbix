@@ -1,11 +1,16 @@
 import 'dart:async';
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart';
+
 import '../services/qbit_api.dart';
 import '../theme/app_colors.dart';
+import '../theme/app_typography.dart';
+import '../widgets/skeleton.dart';
 
 /// 统计页：服务器仪表盘。
-/// 实时速度、会话/累计传输量、全局分享率、磁盘剩余、连接状态、任务概览。
+///
+/// 顶部 Hero：总速度居中超大 + 超细字重。
+/// 下方分组：传输量 / 连接 / 磁盘 / 任务概览，全部 inset grouped。
+/// 非高频关注的次要数据弱化为 tertiaryLabel 灰。
 class StatsScreen extends StatefulWidget {
   const StatsScreen({super.key});
 
@@ -15,7 +20,7 @@ class StatsScreen extends StatefulWidget {
 
 class _StatsScreenState extends State<StatsScreen> {
   Timer? _timer;
-  Map<String, dynamic> _ss = {}; // server_state
+  Map<String, dynamic> _ss = {};
   Map<String, dynamic> _transfer = {};
   List<dynamic> _torrents = [];
   bool _loaded = false;
@@ -55,7 +60,7 @@ class _StatsScreenState extends State<StatsScreen> {
     }
   }
 
-  // —— 取值（server_state 优先，回退 transfer/info）——
+  // —— server_state 优先，回退 transfer/info ——
   num _g(String key, [num fallback = 0]) {
     final v = _ss[key] ?? _transfer[key];
     if (v is num) return v;
@@ -77,6 +82,18 @@ class _StatsScreenState extends State<StatsScreen> {
   String _fmtSpeed(num? bytes) =>
       (bytes ?? 0) <= 0 ? '0 B/s' : '${_fmtSize(bytes)}/s';
 
+  /// 把总字节数拆成 (数字, 单位)，方便 Hero 区分两段排印。
+  (String, String) _heroSpeed(num totalBytes) {
+    final b = totalBytes.toDouble();
+    if (b <= 0) return ('0', 'B/s');
+    if (b < 1024) return (b.toStringAsFixed(0), 'B/s');
+    if (b < 1024 * 1024) return ((b / 1024).toStringAsFixed(1), 'KB/s');
+    if (b < 1024 * 1024 * 1024) {
+      return ((b / 1048576).toStringAsFixed(2), 'MB/s');
+    }
+    return ((b / 1073741824).toStringAsFixed(2), 'GB/s');
+  }
+
   String get _connText {
     final s = (_ss['connection_status'] ?? '').toString();
     switch (s) {
@@ -94,22 +111,23 @@ class _StatsScreenState extends State<StatsScreen> {
   Color get _connColor {
     switch ((_ss['connection_status'] ?? '').toString()) {
       case 'connected':
-        return const Color(0xFF34C759);
+        return CupertinoColors.systemGreen;
       case 'firewalled':
-        return const Color(0xFFFF9500);
+        return CupertinoColors.systemOrange;
       default:
-        return const Color(0xFFFF3B30);
+        return CupertinoColors.systemRed;
     }
   }
 
-  // 任务按状态分组计数
   Map<String, int> _counts() {
     int dl = 0, up = 0, paused = 0, checking = 0, error = 0;
     for (final t in _torrents) {
       final s = (t is Map ? t['state'] : '').toString();
-      if (['downloading', 'metaDL', 'forcedDL', 'stalledDL', 'queuedDL'].contains(s)) {
+      if (['downloading', 'metaDL', 'forcedDL', 'stalledDL', 'queuedDL']
+          .contains(s)) {
         dl++;
-      } else if (['uploading', 'forcedUP', 'stalledUP', 'queuedUP'].contains(s)) {
+      } else if (['uploading', 'forcedUP', 'stalledUP', 'queuedUP']
+          .contains(s)) {
         up++;
       } else if (s.startsWith('paused') || s.startsWith('stopped')) {
         paused++;
@@ -132,120 +150,82 @@ class _StatsScreenState extends State<StatsScreen> {
   @override
   Widget build(BuildContext context) {
     AppColors.watch(context);
-    final c = _counts();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: Text('统计',
-                style: TextStyle(
-                    fontSize: 34,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.of(AppColors.label),
-                    letterSpacing: -0.5)),
-          ),
+          child: Text('统计', style: AppTypography.largeTitle()),
         ),
         Expanded(
-          child: !_loaded
-              ? const Center(child: CupertinoActivityIndicator())
-              : RefreshIndicator(
-                  onRefresh: _refresh,
-                  child: ListView(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
-                    children: [
-                      // 实时速度
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _speedCard('实时下载', _fmtSpeed(_g('dl_info_speed')),
-                                CupertinoIcons.arrow_down_circle_fill, const Color(0xFF5AC8FA)),
-                          ),
-                          const SizedBox(width: 14),
-                          Expanded(
-                            child: _speedCard('实时上传', _fmtSpeed(_g('up_info_speed')),
-                                CupertinoIcons.arrow_up_circle_fill, const Color(0xFF007AFF)),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 22),
-                      _sectionTitle('传输量'),
-                      _card([
-                        _row('本次会话 · 下载', _fmtSize(_g('dl_info_data'))),
-                        _row('本次会话 · 上传', _fmtSize(_g('up_info_data'))),
-                        _row('累计下载', _fmtSize(_g('alltime_dl'))),
-                        _row('累计上传', _fmtSize(_g('alltime_ul'))),
-                        _row('全局分享率', _g('global_ratio').toStringAsFixed(2),
-                            highlight: const Color(0xFFFF9500)),
-                        _row('本次浪费', _fmtSize(_g('total_wasted_session'))),
-                      ]),
-                      const SizedBox(height: 22),
-                      _sectionTitle('连接'),
-                      _card([
-                        _row('连接状态', _connText, highlight: _connColor),
-                        _row('DHT 节点', _g('dht_nodes').toInt().toString()),
-                        _row('对等连接数', _g('total_peer_connections').toInt().toString()),
-                        _row('下载限速',
-                            _g('dl_rate_limit') <= 0 ? '无限制' : _fmtSpeed(_g('dl_rate_limit'))),
-                        _row('上传限速',
-                            _g('up_rate_limit') <= 0 ? '无限制' : _fmtSpeed(_g('up_rate_limit'))),
-                      ]),
-                      const SizedBox(height: 22),
-                      _sectionTitle('磁盘'),
-                      _card([
-                        _row('默认保存路径剩余', _fmtSize(_g('free_space_on_disk')),
-                            highlight: const Color(0xFF34C759)),
-                      ]),
-                      const SizedBox(height: 22),
-                      _sectionTitle('任务概览'),
-                      _countGrid(c),
-                    ],
-                  ),
-                ),
+          child: CustomScrollView(
+            physics: const BouncingScrollPhysics(
+              parent: AlwaysScrollableScrollPhysics(),
+            ),
+            slivers: [
+              CupertinoSliverRefreshControl(onRefresh: _refresh),
+              SliverToBoxAdapter(
+                child: _loaded ? _buildContent() : _buildSkeleton(),
+              ),
+              const SliverToBoxAdapter(child: SizedBox(height: 32)),
+            ],
+          ),
         ),
       ],
     );
   }
 
-  Widget _speedCard(String title, String speed, IconData icon, Color color) {
-    final parts = speed.split(' ');
-    final number = parts.isNotEmpty ? parts[0] : speed;
-    final unit = parts.length > 1 ? parts.sublist(1).join(' ') : '';
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.of(AppColors.card),
-        borderRadius: BorderRadius.circular(20),
-      ),
+  Widget _buildContent() {
+    final dl = _g('dl_info_speed');
+    final up = _g('up_info_speed');
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _buildHero(dl, up),
+        _buildTransferSection(),
+        _buildConnectionSection(),
+        _buildDiskSection(),
+        _buildOverviewSection(_counts()),
+      ],
+    );
+  }
+
+  // —— Hero：居中超大总速 + 单位 + 上下行分拆细节 ——
+  Widget _buildHero(num dl, num up) {
+    final (number, unit) = _heroSpeed(dl + up);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 36, 20, 36),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Icon(icon, color: color, size: 18),
-              const SizedBox(width: 6),
-              Text(title,
-                  style: const TextStyle(fontSize: 14, color: Color(0xFF8E8E93))),
-            ],
+          Text(
+            '当前总速',
+            style: AppTypography.caption(
+                color: AppColors.of(AppColors.tertiaryLabel)),
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 10),
+          // 总速数字：56pt w200，启用 tabular figures 防抖。
+          Text(number, style: AppTypography.hero()),
+          const SizedBox(height: 6),
+          Text(
+            unit,
+            style: AppTypography.subtitle().copyWith(letterSpacing: 0.6),
+          ),
+          const SizedBox(height: 22),
+          // 下/上行细分：极小字号 + 中灰色，作为 Hero 的脚注。
           Row(
-            crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic,
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Flexible(
-                child: Text(number,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                        fontSize: 26, fontWeight: FontWeight.bold, color: color)),
-              ),
+              Icon(CupertinoIcons.arrow_down,
+                  size: 11,
+                  color: AppColors.of(AppColors.tertiaryLabel)),
               const SizedBox(width: 4),
-              Text(unit,
-                  style: const TextStyle(fontSize: 12, color: Color(0xFF8E8E93))),
+              Text(_fmtSpeed(dl), style: AppTypography.caption()),
+              const SizedBox(width: 28),
+              Icon(CupertinoIcons.arrow_up,
+                  size: 11,
+                  color: AppColors.of(AppColors.tertiaryLabel)),
+              const SizedBox(width: 4),
+              Text(_fmtSpeed(up), style: AppTypography.caption()),
             ],
           ),
         ],
@@ -253,86 +233,162 @@ class _StatsScreenState extends State<StatsScreen> {
     );
   }
 
-  Widget _countGrid(Map<String, int> c) {
-    final items = [
-      ['总任务', c['total']!, const Color(0xFF007AFF), CupertinoIcons.square_stack_3d_up_fill],
-      ['下载中', c['dl']!, const Color(0xFF5AC8FA), CupertinoIcons.arrow_down_circle_fill],
-      ['做种中', c['up']!, const Color(0xFF34C759), CupertinoIcons.arrow_up_circle_fill],
-      ['已暂停', c['paused']!, const Color(0xFF8E8E93), CupertinoIcons.pause_circle_fill],
-      ['校验中', c['checking']!, const Color(0xFFFF9500), CupertinoIcons.arrow_2_circlepath_circle_fill],
-      ['错误', c['error']!, const Color(0xFFFF3B30), CupertinoIcons.exclamationmark_circle_fill],
+  Widget _buildTransferSection() {
+    return CupertinoListSection.insetGrouped(
+      header: Text('传输量', style: AppTypography.sectionHeader()),
+      children: [
+        _tile('本次会话 · 下载', _fmtSize(_g('dl_info_data'))),
+        _tile('本次会话 · 上传', _fmtSize(_g('up_info_data'))),
+        _tile('累计下载', _fmtSize(_g('alltime_dl'))),
+        _tile('累计上传', _fmtSize(_g('alltime_ul'))),
+        _tile('全局分享率', _g('global_ratio').toStringAsFixed(2),
+            valueColor: CupertinoColors.systemOrange),
+        _tile('本次浪费', _fmtSize(_g('total_wasted_session')), muted: true),
+      ],
+    );
+  }
+
+  Widget _buildConnectionSection() {
+    return CupertinoListSection.insetGrouped(
+      header: Text('连接', style: AppTypography.sectionHeader()),
+      children: [
+        _tile('连接状态', _connText, valueColor: _connColor),
+        _tile('DHT 节点', _g('dht_nodes').toInt().toString(), muted: true),
+        _tile('对等连接数', _g('total_peer_connections').toInt().toString(),
+            muted: true),
+        _tile(
+          '下载限速',
+          _g('dl_rate_limit') <= 0 ? '无限制' : _fmtSpeed(_g('dl_rate_limit')),
+          muted: true,
+        ),
+        _tile(
+          '上传限速',
+          _g('up_rate_limit') <= 0 ? '无限制' : _fmtSpeed(_g('up_rate_limit')),
+          muted: true,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDiskSection() {
+    return CupertinoListSection.insetGrouped(
+      header: Text('磁盘', style: AppTypography.sectionHeader()),
+      children: [
+        _tile('默认保存路径剩余', _fmtSize(_g('free_space_on_disk')),
+            muted: true),
+      ],
+    );
+  }
+
+  Widget _buildOverviewSection(Map<String, int> c) {
+    final items = <List<dynamic>>[
+      ['总任务', c['total']!, CupertinoColors.systemBlue,
+          CupertinoIcons.square_stack_3d_up_fill],
+      ['下载中', c['dl']!, const Color(0xFF5AC8FA),
+          CupertinoIcons.arrow_down_circle_fill],
+      ['做种中', c['up']!, CupertinoColors.systemGreen,
+          CupertinoIcons.arrow_up_circle_fill],
+      ['已暂停', c['paused']!, AppColors.of(AppColors.secondaryLabel),
+          CupertinoIcons.pause_circle_fill],
+      ['校验中', c['checking']!, CupertinoColors.systemOrange,
+          CupertinoIcons.arrow_2_circlepath_circle_fill],
+      ['错误', c['error']!, CupertinoColors.systemRed,
+          CupertinoIcons.exclamationmark_circle_fill],
     ];
-    return GridView.count(
-      crossAxisCount: 3,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      mainAxisSpacing: 14,
-      crossAxisSpacing: 14,
-      childAspectRatio: 1.0,
+    return CupertinoListSection.insetGrouped(
+      header: Text('任务概览', style: AppTypography.sectionHeader()),
       children: items.map((it) {
         final label = it[0] as String;
         final value = it[1] as int;
         final color = it[2] as Color;
         final icon = it[3] as IconData;
-        return Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: AppColors.of(AppColors.card),
-            borderRadius: BorderRadius.circular(18),
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(icon, color: color, size: 22),
-              const SizedBox(height: 8),
-              Text('$value',
-                  style: TextStyle(
-                      fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.of(AppColors.label))),
-              const SizedBox(height: 2),
-              Text(label,
-                  style: const TextStyle(fontSize: 12, color: Color(0xFF8E8E93))),
-            ],
+        final isZero = value == 0;
+        return CupertinoListTile.notched(
+          leading: Icon(icon, color: color, size: 22),
+          title: Text(label, style: AppTypography.body()),
+          additionalInfo: Text(
+            '$value',
+            style: AppTypography.subtitle().copyWith(
+              fontWeight: FontWeight.w600,
+              color: isZero
+                  ? AppColors.of(AppColors.tertiaryLabel)
+                  : AppColors.of(AppColors.label),
+            ),
           ),
         );
       }).toList(),
     );
   }
 
-  Widget _sectionTitle(String t) => Padding(
-        padding: const EdgeInsets.only(left: 4, bottom: 8),
-        child: Text(t,
-            style: TextStyle(
-                fontSize: 13, color: AppColors.of(AppColors.secondaryLabel))),
-      );
+  // 通用键值行：muted=true 时把值色压到 tertiaryLabel（背景信息）。
+  Widget _tile(
+    String label,
+    String value, {
+    Color? valueColor,
+    bool muted = false,
+  }) {
+    return CupertinoListTile(
+      title: Text(label, style: AppTypography.body()),
+      additionalInfo: Text(
+        value,
+        style: AppTypography.subtitle(
+          color: valueColor ??
+              (muted
+                  ? AppColors.of(AppColors.tertiaryLabel)
+                  : AppColors.of(AppColors.label)),
+        ).copyWith(fontWeight: FontWeight.w500),
+      ),
+    );
+  }
 
-  Widget _card(List<Widget> children) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-        decoration: BoxDecoration(
-          color: AppColors.of(AppColors.card),
-          borderRadius: BorderRadius.circular(16),
+  // —— 加载态：骨架屏，结构与正式页同构，避免布局跳动 ——
+  Widget _buildSkeleton() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Padding(
+          padding: EdgeInsets.fromLTRB(20, 36, 20, 36),
+          child: Column(
+            children: [
+              SkeletonBar(width: 60, height: 12),
+              SizedBox(height: 14),
+              SkeletonBar(
+                width: 200,
+                height: 56,
+                borderRadius: BorderRadius.all(Radius.circular(8)),
+              ),
+              SizedBox(height: 10),
+              SkeletonBar(width: 60, height: 14),
+              SizedBox(height: 22),
+              SkeletonBar(width: 220, height: 12),
+            ],
+          ),
         ),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: children),
-      );
+        _sectionSkeleton(6),
+        _sectionSkeleton(5),
+        _sectionSkeleton(1),
+        _sectionSkeleton(6, withLeading: true),
+      ],
+    );
+  }
 
-  Widget _row(String label, String value, {Color? highlight}) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 11),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(label,
-                style: TextStyle(
-                    fontSize: 14, color: AppColors.of(AppColors.secondaryLabel))),
-            const SizedBox(width: 16),
-            Flexible(
-              child: Text(value,
-                  textAlign: TextAlign.right,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: highlight ?? AppColors.of(AppColors.label))),
-            ),
-          ],
+  Widget _sectionSkeleton(int rowCount, {bool withLeading = false}) {
+    return CupertinoListSection.insetGrouped(
+      header: const SkeletonBar(width: 60, height: 12),
+      children: List.generate(
+        rowCount,
+        (_) => CupertinoListTile(
+          leading: withLeading
+              ? const SkeletonBar(
+                  width: 22,
+                  height: 22,
+                  borderRadius: BorderRadius.all(Radius.circular(11)),
+                )
+              : null,
+          title: const SkeletonBar(width: 100, height: 14),
+          additionalInfo: const SkeletonBar(width: 56, height: 14),
         ),
-      );
+      ),
+    );
+  }
 }

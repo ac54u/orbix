@@ -1,12 +1,15 @@
 import 'dart:async';
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+
 import '../services/qbit_api.dart';
 import '../theme/app_colors.dart';
+import '../theme/app_typography.dart';
+import '../widgets/skeleton.dart';
+import '../widgets/toast.dart';
 import 'torrent_detail_screen.dart';
 
-/// 搜索页：本地任务搜索 + qB 联网搜索引擎（顶部切换）。
+/// 搜索页：本地任务搜索 + qB 联网搜索引擎（顶部分段切换）。
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
 
@@ -27,9 +30,7 @@ class _SearchScreenState extends State<SearchScreen> {
   int? _searchId;
   List<dynamic> _results = [];
   String? _onlineNotice; // 无插件 / 出错时的友好提示
-  bool _onlineSearched = false; // 是否已发起过一次搜索
-
-  static const Color _accent = Color(0xFF007AFF);
+  bool _onlineSearched = false;
 
   @override
   void initState() {
@@ -94,7 +95,6 @@ class _SearchScreenState extends State<SearchScreen> {
       _results = [];
     });
 
-    // 检查插件
     final plugins = await api.getSearchPlugins();
     if (!mounted) return;
     if (plugins.isEmpty) {
@@ -105,10 +105,8 @@ class _SearchScreenState extends State<SearchScreen> {
       });
       return;
     }
-    final hasEnabled =
-        plugins.any((p) => p is Map && p['enabled'] == true);
+    final hasEnabled = plugins.any((p) => p is Map && p['enabled'] == true);
 
-    // 清掉上一次的 job
     _cleanupSearch();
 
     final id = await api.startSearch(pattern,
@@ -181,14 +179,7 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   void _toast(String msg, {required bool ok}) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(msg),
-        backgroundColor: ok ? const Color(0xFF34C759) : const Color(0xFFFF3B30),
-        behavior: SnackBarBehavior.floating,
-        duration: const Duration(milliseconds: 1600),
-      ),
-    );
+    Toast.show(context, msg, type: ok ? ToastType.success : ToastType.error);
   }
 
   // —— 格式化 ——
@@ -202,28 +193,42 @@ class _SearchScreenState extends State<SearchScreen> {
     return '${(b / 1073741824).toStringAsFixed(2)} GB';
   }
 
-  Map<String, dynamic> _stateInfo(String state) {
-    const blue = Color(0xFF007AFF);
-    const green = Color(0xFF34C759);
-    const grey = Color(0xFF8E8E93);
-    const orange = Color(0xFFFF9500);
-    const red = Color(0xFFFF3B30);
+  // 状态 → (color, icon)；颜色全走 Cupertino 系统语义色 / AppColors 动态色。
+  ({Color color, IconData icon}) _stateInfo(String state) {
     if (['downloading', 'metaDL', 'forcedDL', 'stalledDL'].contains(state)) {
-      return {'color': blue, 'icon': CupertinoIcons.arrow_down_circle_fill};
+      return (
+        color: CupertinoColors.systemBlue,
+        icon: CupertinoIcons.arrow_down_circle_fill,
+      );
     }
     if (['uploading', 'forcedUP', 'stalledUP'].contains(state)) {
-      return {'color': green, 'icon': CupertinoIcons.arrow_up_circle_fill};
+      return (
+        color: CupertinoColors.systemGreen,
+        icon: CupertinoIcons.arrow_up_circle_fill,
+      );
     }
     if (state.startsWith('paused') || state.startsWith('stopped')) {
-      return {'color': grey, 'icon': CupertinoIcons.pause_circle_fill};
+      return (
+        color: AppColors.of(AppColors.secondaryLabel),
+        icon: CupertinoIcons.pause_circle_fill,
+      );
     }
     if (state.startsWith('checking')) {
-      return {'color': orange, 'icon': CupertinoIcons.arrow_2_circlepath_circle_fill};
+      return (
+        color: CupertinoColors.systemOrange,
+        icon: CupertinoIcons.arrow_2_circlepath_circle_fill,
+      );
     }
     if (state == 'error' || state == 'missingFiles') {
-      return {'color': red, 'icon': CupertinoIcons.exclamationmark_circle_fill};
+      return (
+        color: CupertinoColors.systemRed,
+        icon: CupertinoIcons.exclamationmark_circle_fill,
+      );
     }
-    return {'color': grey, 'icon': CupertinoIcons.circle};
+    return (
+      color: AppColors.of(AppColors.tertiaryLabel),
+      icon: CupertinoIcons.circle,
+    );
   }
 
   @override
@@ -234,18 +239,10 @@ class _SearchScreenState extends State<SearchScreen> {
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: Text('搜索',
-                style: TextStyle(
-                    fontSize: 34,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.of(AppColors.label),
-                    letterSpacing: -0.5)),
-          ),
+          child: Text('搜索', style: AppTypography.largeTitle()),
         ),
-        const SizedBox(height: 12),
-        // 模式切换
+        const SizedBox(height: 14),
+        // 模式切换：iOS 原生滑动分段控件
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20),
           child: CupertinoSlidingSegmentedControl<int>(
@@ -262,13 +259,14 @@ class _SearchScreenState extends State<SearchScreen> {
           ),
         ),
         const SizedBox(height: 14),
-        // 搜索框
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
+          padding: const EdgeInsets.symmetric(horizontal: 16),
           child: CupertinoSearchTextField(
             controller: _queryCtrl,
             placeholder: _mode == 0 ? '搜索我的任务' : '输入关键字后回车搜索',
-            style: TextStyle(color: AppColors.of(AppColors.label)),
+            style: AppTypography.body(),
+            placeholderStyle: AppTypography.body(
+                color: AppColors.of(AppColors.tertiaryLabel)),
             backgroundColor: AppColors.of(AppColors.card),
             onChanged: (_) {
               if (_mode == 0) setState(() {});
@@ -278,7 +276,7 @@ class _SearchScreenState extends State<SearchScreen> {
             },
           ),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 8),
         Expanded(child: _mode == 0 ? _buildLocal() : _buildOnline()),
       ],
     );
@@ -286,199 +284,298 @@ class _SearchScreenState extends State<SearchScreen> {
 
   Widget _segLabel(String t) => Padding(
         padding: const EdgeInsets.symmetric(vertical: 8),
-        child: Text(t,
-            style: TextStyle(fontSize: 14, color: AppColors.of(AppColors.label))),
+        child: Text(t, style: AppTypography.body().copyWith(fontSize: 14)),
       );
 
-  // —— 本地结果 ——
+  // —— 本地结果（Cupertino sliver refresh + inset grouped）——
   Widget _buildLocal() {
-    if (!_localLoaded) {
-      return const Center(child: CupertinoActivityIndicator());
-    }
-    final list = _localResults;
-    if (list.isEmpty) {
-      return _emptyHint(
-          _queryCtrl.text.trim().isEmpty ? '暂无任务' : '没有匹配「${_queryCtrl.text.trim()}」的任务');
-    }
-    return RefreshIndicator(
-      onRefresh: _loadLocal,
-      child: ListView.separated(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-        itemCount: list.length,
-        separatorBuilder: (_, __) => const SizedBox(height: 12),
-        itemBuilder: (_, i) {
-          final t = list[i] as Map;
-          final info = _stateInfo((t['state'] ?? '').toString());
-          final progress = (t['progress'] ?? 0.0).toDouble();
-          return GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: () async {
-              await Get.to(() =>
-                  TorrentDetailScreen(torrent: Map<String, dynamic>.from(t)));
-              _loadLocal();
-            },
-            child: Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: AppColors.of(AppColors.card),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Row(
-                children: [
-                  Icon(info['icon'], color: info['color'], size: 26),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text((t['name'] ?? '').toString(),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.of(AppColors.label))),
-                        const SizedBox(height: 4),
-                        Text(
-                            '${_fmtSize((t['total_size'] ?? 0) as num)}  ·  ${(progress * 100).toStringAsFixed(1)}%',
-                            style: const TextStyle(
-                                fontSize: 12, color: Color(0xFF8E8E93))),
-                      ],
-                    ),
-                  ),
-                  const Icon(CupertinoIcons.chevron_right,
-                      size: 16, color: Color(0xFFC7C7CC)),
-                ],
-              ),
-            ),
-          );
-        },
+    return CustomScrollView(
+      physics: const BouncingScrollPhysics(
+        parent: AlwaysScrollableScrollPhysics(),
       ),
+      slivers: [
+        CupertinoSliverRefreshControl(onRefresh: _loadLocal),
+        if (!_localLoaded)
+          SliverToBoxAdapter(child: _buildLocalSkeleton())
+        else if (_localResults.isEmpty)
+          SliverFillRemaining(
+            hasScrollBody: false,
+            child: _emptyHint(
+              _queryCtrl.text.trim().isEmpty
+                  ? '暂无任务'
+                  : '没有匹配「${_queryCtrl.text.trim()}」的任务',
+            ),
+          )
+        else
+          SliverToBoxAdapter(child: _buildLocalList()),
+        const SliverToBoxAdapter(child: SizedBox(height: 24)),
+      ],
+    );
+  }
+
+  Widget _buildLocalList() {
+    final list = _localResults;
+    return CupertinoListSection.insetGrouped(
+      children: list.map((t) {
+        final tt = t as Map;
+        final info = _stateInfo((tt['state'] ?? '').toString());
+        final progress = ((tt['progress'] ?? 0.0) as num).toDouble();
+        final dotStyle = AppTypography.caption(
+            color: AppColors.of(AppColors.tertiaryLabel));
+        return CupertinoListTile.notched(
+          leading: Icon(info.icon, color: info.color, size: 22),
+          title: Text(
+            (tt['name'] ?? '').toString(),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: AppTypography.body().copyWith(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+              height: 1.25,
+            ),
+          ),
+          subtitle: Text.rich(
+            TextSpan(children: [
+              TextSpan(
+                  text: _fmtSize((tt['total_size'] ?? 0) as num),
+                  style: AppTypography.caption()),
+              TextSpan(text: '  ·  ', style: dotStyle),
+              TextSpan(
+                  text: '${(progress * 100).toStringAsFixed(1)}%',
+                  style: AppTypography.caption()),
+            ]),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          trailing: const CupertinoListTileChevron(),
+          onTap: () async {
+            await Get.to(() => TorrentDetailScreen(
+                torrent: Map<String, dynamic>.from(tt)));
+            _loadLocal();
+          },
+        );
+      }).toList(),
     );
   }
 
   // —— 联网结果 ——
   Widget _buildOnline() {
     if (_onlineNotice != null) {
-      return _emptyHint(_onlineNotice!, icon: CupertinoIcons.exclamationmark_circle);
+      return _emptyHint(
+        _onlineNotice!,
+        icon: CupertinoIcons.exclamationmark_circle,
+      );
     }
     if (!_onlineSearched) {
-      return _emptyHint('输入关键字后回车，跨站点搜索种子',
-          icon: CupertinoIcons.search);
+      return _emptyHint(
+        '输入关键字后回车，跨站点搜索种子',
+        icon: CupertinoIcons.search,
+      );
     }
-    return Column(
-      children: [
+    if (_searching && _results.isEmpty) {
+      return _buildOnlineSkeleton();
+    }
+    if (!_searching && _results.isEmpty) {
+      return _emptyHint('没有找到结果，换个关键字试试');
+    }
+    return CustomScrollView(
+      physics: const BouncingScrollPhysics(
+        parent: AlwaysScrollableScrollPhysics(),
+      ),
+      slivers: [
         if (_searching)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const CupertinoActivityIndicator(),
-                const SizedBox(width: 8),
-                Text('搜索中…已找到 ${_results.length} 条',
-                    style: const TextStyle(fontSize: 13, color: Color(0xFF8E8E93))),
-              ],
-            ),
-          ),
-        Expanded(
-          child: _results.isEmpty
-              ? (_searching
-                  ? const SizedBox.shrink()
-                  : _emptyHint('没有找到结果，换个关键字试试'))
-              : ListView.separated(
-                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-                  itemCount: _results.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 12),
-                  itemBuilder: (_, i) => _onlineRow(_results[i] as Map),
-                ),
-        ),
+          SliverToBoxAdapter(child: _buildSearchingBanner()),
+        SliverToBoxAdapter(child: _buildOnlineList()),
+        const SliverToBoxAdapter(child: SizedBox(height: 24)),
       ],
     );
   }
 
-  Widget _onlineRow(Map r) {
+  Widget _buildSearchingBanner() {
+    return Padding(
+      padding: const EdgeInsets.only(top: 4, bottom: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const CupertinoActivityIndicator(radius: 8),
+          const SizedBox(width: 8),
+          Text(
+            '搜索中…已找到 ${_results.length} 条',
+            style: AppTypography.caption(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOnlineList() {
+    return CupertinoListSection.insetGrouped(
+      children:
+          _results.map((r) => _buildOnlineTile(r as Map)).toList(),
+    );
+  }
+
+  Widget _buildOnlineTile(Map r) {
     final name = (r['fileName'] ?? '').toString();
     final size = r['fileSize'] as num?;
-    final seeders = (r['nbSeeders'] ?? -1) as num;
-    final leechers = (r['nbLeechers'] ?? -1) as num;
+    final seeders = ((r['nbSeeders'] ?? -1) as num).toInt();
+    final leechers = ((r['nbLeechers'] ?? -1) as num).toInt();
     final site = Uri.tryParse((r['siteUrl'] ?? '').toString())?.host ?? '';
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: () => _addResult(r),
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: AppColors.of(AppColors.card),
-          borderRadius: BorderRadius.circular(16),
+
+    final dotStyle = AppTypography.caption(
+        color: AppColors.of(AppColors.tertiaryLabel));
+    final spans = <InlineSpan>[];
+    void addSep() {
+      if (spans.isNotEmpty) {
+        spans.add(TextSpan(text: '  ·  ', style: dotStyle));
+      }
+    }
+
+    if (size != null) {
+      addSep();
+      spans.add(TextSpan(
+        text: _fmtSize(size),
+        style: AppTypography.caption(),
+      ));
+    }
+    addSep();
+    spans.add(const WidgetSpan(
+      alignment: PlaceholderAlignment.middle,
+      child: Icon(CupertinoIcons.arrow_up,
+          size: 10, color: CupertinoColors.systemGreen),
+    ));
+    spans.add(TextSpan(
+      text: ' ${seeders < 0 ? '?' : seeders}',
+      style: AppTypography.caption(color: CupertinoColors.systemGreen),
+    ));
+    addSep();
+    spans.add(const WidgetSpan(
+      alignment: PlaceholderAlignment.middle,
+      child: Icon(CupertinoIcons.arrow_down,
+          size: 10, color: CupertinoColors.systemOrange),
+    ));
+    spans.add(TextSpan(
+      text: ' ${leechers < 0 ? '?' : leechers}',
+      style: AppTypography.caption(color: CupertinoColors.systemOrange),
+    ));
+
+    final subtitleWidgets = <Widget>[
+      Text.rich(
+        TextSpan(children: spans),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+    ];
+    if (site.isNotEmpty) {
+      subtitleWidgets.addAll([
+        const SizedBox(height: 2),
+        Text(
+          site,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: AppTypography.caption(
+              color: AppColors.of(AppColors.tertiaryLabel)),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(name,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.of(AppColors.label))),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                _chip(CupertinoIcons.doc, _fmtSize(size), const Color(0xFF8E8E93)),
-                const SizedBox(width: 12),
-                _chip(CupertinoIcons.arrow_up_circle_fill,
-                    seeders < 0 ? '?' : seeders.toInt().toString(), const Color(0xFF34C759)),
-                const SizedBox(width: 12),
-                _chip(CupertinoIcons.arrow_down_circle_fill,
-                    leechers < 0 ? '?' : leechers.toInt().toString(), const Color(0xFFFF9500)),
-                const Spacer(),
-                const Icon(CupertinoIcons.add_circled,
-                    size: 20, color: _accent),
-              ],
-            ),
-            if (site.isNotEmpty) ...[
-              const SizedBox(height: 6),
-              Text(site,
-                  style: const TextStyle(fontSize: 11, color: Color(0xFFAEAEB2))),
-            ],
-          ],
+      ]);
+    }
+
+    return CupertinoListTile(
+      title: Text(
+        name,
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+        style: AppTypography.body().copyWith(
+          fontSize: 15,
+          fontWeight: FontWeight.w600,
+          height: 1.25,
+        ),
+      ),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: subtitleWidgets,
+      ),
+      trailing: const Icon(
+        CupertinoIcons.add_circled,
+        size: 22,
+        color: CupertinoColors.systemBlue,
+      ),
+      onTap: () => _addResult(r),
+    );
+  }
+
+  // —— 加载态：骨架屏 ——
+  Widget _buildLocalSkeleton() {
+    return CupertinoListSection.insetGrouped(
+      children: List.generate(
+        6,
+        (_) => const CupertinoListTile(
+          leading: SkeletonBar(
+            width: 22,
+            height: 22,
+            borderRadius: BorderRadius.all(Radius.circular(11)),
+          ),
+          title: SkeletonBar(width: 200, height: 14),
+          subtitle: SkeletonBar(width: 100, height: 12),
+          trailing: CupertinoListTileChevron(),
         ),
       ),
     );
   }
 
-  Widget _chip(IconData icon, String text, Color color) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
+  Widget _buildOnlineSkeleton() {
+    return ListView(
+      physics: const BouncingScrollPhysics(
+        parent: AlwaysScrollableScrollPhysics(),
+      ),
       children: [
-        Icon(icon, size: 14, color: color),
-        const SizedBox(width: 4),
-        Text(text,
-            style: TextStyle(
-                fontSize: 12,
-                color: AppColors.of(AppColors.secondaryLabel),
-                fontWeight: FontWeight.w500)),
+        Padding(
+          padding: const EdgeInsets.only(top: 4, bottom: 4),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const CupertinoActivityIndicator(radius: 8),
+              const SizedBox(width: 8),
+              Text('搜索中…', style: AppTypography.caption()),
+            ],
+          ),
+        ),
+        CupertinoListSection.insetGrouped(
+          children: List.generate(
+            5,
+            (_) => const CupertinoListTile(
+              title: SkeletonBar(width: 220, height: 14),
+              subtitle: SkeletonBar(width: 140, height: 12),
+              trailing: SkeletonBar(
+                width: 22,
+                height: 22,
+                borderRadius: BorderRadius.all(Radius.circular(11)),
+              ),
+            ),
+          ),
+        ),
       ],
     );
   }
 
   Widget _emptyHint(String text, {IconData icon = CupertinoIcons.tray}) {
-    return ListView(
-      physics: const AlwaysScrollableScrollPhysics(),
-      children: [
-        const SizedBox(height: 80),
-        Icon(icon, size: 46, color: AppColors.of(AppColors.placeholder)),
-        const SizedBox(height: 14),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 40),
-          child: Text(text,
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 40),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 40, color: AppColors.of(AppColors.placeholder)),
+            const SizedBox(height: 14),
+            Text(
+              text,
               textAlign: TextAlign.center,
-              style: const TextStyle(
-                  fontSize: 14, color: Color(0xFF8E8E93), height: 1.5)),
+              style: AppTypography.subtitle(
+                  color: AppColors.of(AppColors.tertiaryLabel)),
+            ),
+          ],
         ),
-      ],
+      ),
     );
   }
 }

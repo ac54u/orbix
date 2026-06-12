@@ -1,17 +1,19 @@
 import 'dart:async';
 
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:get/get.dart';
 
 import '../services/qbit_api.dart';
 import '../theme/app_colors.dart';
+import '../theme/app_typography.dart';
 import '../widgets/connecting_dialog.dart';
+import '../widgets/toast.dart';
 import 'login_screen.dart';
 import 'main_screen.dart';
 
-/// 服务器管理页：从设置页右滑进入。
+/// 服务器管理页：从设置页 / 启动选择页进入。
+///
 /// 展示全部已保存的服务器，左滑可「连接 / 编辑 / 删除」，右上角「+」添加。
 class ServerManagementPage extends StatefulWidget {
   /// 切换服务器成功后的回调：让主界面回到种子页并立即刷新。
@@ -23,10 +25,6 @@ class ServerManagementPage extends StatefulWidget {
 }
 
 class _ServerManagementPageState extends State<ServerManagementPage> {
-  static const Color _accent = Color(0xFF007AFF);
-  static const Color _inkMuted = Color(0xFF8E8E93);
-  Color get _ink => AppColors.of(AppColors.label);
-
   List<ServerConfig> _servers = [];
   String? _activeUrl;
   String? _activeUser;
@@ -57,45 +55,39 @@ class _ServerManagementPageState extends State<ServerManagementPage> {
       s.name.isNotEmpty ? s.name : s.url.replaceFirst(RegExp(r'^https?://'), '');
 
   // —— 连接（点击行或左滑「连接」都走这里） ——
-  // 弹出「连接中」状态遮罩，接入真实结果：成功进主界面，失败提示。
   Future<void> _switchTo(ServerConfig s) async {
     await QBitApi.setActiveServer(s);
+    if (!mounted) return;
     final api = QBitApi();
     api.setServer(s);
 
     showConnectingDialog(context);
-    // 同时等待真实登录与最小展示时长，避免遮罩一闪而过
     final results = await Future.wait([
       api.connect(),
       Future<void>.delayed(const Duration(milliseconds: 600)),
     ]);
     if (!mounted) return;
-    Navigator.of(context, rootNavigator: true).pop(); // 关闭连接遮罩
+    Navigator.of(context, rootNavigator: true).pop();
 
     final result = results[0] as ConnectResult;
     if (result.success) {
       if (widget.onSwitched != null) {
-        // 来自设置页：返回并通知主界面回到种子页刷新
         Navigator.of(context).pop();
         widget.onSwitched!.call();
       } else {
-        // 来自启动选择页：直接进入主界面
         Get.offAll(() => const MainScreen());
       }
     } else {
       _toast('连接失败：${result.message}', ok: false);
-      await _load(); // 刷新「使用中」标记
+      await _load();
     }
   }
 
-
-  // —— 以底部半屏弹出登录页：添加 / 编辑 ——
+  // 半屏弹出登录页：添加 / 编辑（Cupertino 原生 modal popup，自带底部 Align + 滑入动效）
   Future<T?> _presentLoginSheet<T>({ServerConfig? editServer}) {
-    return Get.bottomSheet<T>(
-      LoginScreen(editServer: editServer, asSheet: true),
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      barrierColor: Colors.black54,
+    return showCupertinoModalPopup<T>(
+      context: context,
+      builder: (_) => LoginScreen(editServer: editServer, asSheet: true),
     );
   }
 
@@ -141,50 +133,41 @@ class _ServerManagementPageState extends State<ServerManagementPage> {
   }
 
   void _toast(String msg, {required bool ok}) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(msg),
-        backgroundColor: ok ? const Color(0xFF34C759) : const Color(0xFFFF3B30),
-        behavior: SnackBarBehavior.floating,
-        duration: const Duration(milliseconds: 1400),
-      ),
-    );
+    Toast.show(context, msg, type: ok ? ToastType.success : ToastType.error);
   }
 
   @override
   Widget build(BuildContext context) {
     AppColors.watch(context);
-    return Scaffold(
+    return CupertinoPageScaffold(
       backgroundColor: AppColors.of(AppColors.groupedBg),
-      appBar: AppBar(
-        backgroundColor: AppColors.of(AppColors.groupedBg),
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        centerTitle: true,
-        leading: CupertinoButton(
-          padding: EdgeInsets.zero,
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Icon(CupertinoIcons.back, color: _accent),
-        ),
-        title: Text('服务器管理',
-            style: TextStyle(
-                color: _ink, fontSize: 17, fontWeight: FontWeight.w600)),
-        actions: [
-          CupertinoButton(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            onPressed: _addServer,
-            child: const Icon(CupertinoIcons.add, color: _accent, size: 24),
+      navigationBar: CupertinoNavigationBar(
+        backgroundColor:
+            AppColors.of(AppColors.groupedBg).withValues(alpha: 0.85),
+        border: Border(
+          bottom: BorderSide(
+            color: AppColors.of(AppColors.separator),
+            width: 0.0,
           ),
-        ],
+        ),
+        previousPageTitle: '设置',
+        middle: Text('服务器管理', style: AppTypography.navTitle()),
+        trailing: CupertinoButton(
+          padding: EdgeInsets.zero,
+          minimumSize: Size.zero,
+          onPressed: _addServer,
+          child: const Icon(
+            CupertinoIcons.add,
+            color: CupertinoColors.systemBlue,
+            size: 24,
+          ),
+        ),
       ),
-      body: SafeArea(
-        top: false,
-        child: _loading
-            ? const Center(child: CupertinoActivityIndicator())
-            : _servers.isEmpty
-                ? _buildEmpty()
-                : _buildList(),
-      ),
+      child: _loading
+          ? const Center(child: CupertinoActivityIndicator())
+          : _servers.isEmpty
+              ? _buildEmpty()
+              : _buildList(),
     );
   }
 
@@ -193,15 +176,23 @@ class _ServerManagementPageState extends State<ServerManagementPage> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(CupertinoIcons.cloud, size: 48, color: _inkMuted),
-          const SizedBox(height: 12),
-          const Text('暂无服务器',
-              style: TextStyle(fontSize: 15, color: _inkMuted)),
-          const SizedBox(height: 16),
-          CupertinoButton(
-            color: _accent,
-            borderRadius: BorderRadius.circular(12),
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+          Icon(
+            CupertinoIcons.cloud,
+            size: 44,
+            color: AppColors.of(AppColors.placeholder),
+          ),
+          const SizedBox(height: 14),
+          Text(
+            '暂无服务器',
+            style: AppTypography.subtitle(
+              color: AppColors.of(AppColors.tertiaryLabel),
+            ),
+          ),
+          const SizedBox(height: 18),
+          CupertinoButton.filled(
+            borderRadius: BorderRadius.circular(14),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
             onPressed: _addServer,
             child: const Text('添加服务器'),
           ),
@@ -210,15 +201,40 @@ class _ServerManagementPageState extends State<ServerManagementPage> {
     );
   }
 
+  // 单 inset 容器 + 行间 0.5pt hairline；外层 Clip 让左滑揭示在圆角内。
   Widget _buildList() {
-    return ListView.separated(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-      itemCount: _servers.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 10),
-      itemBuilder: (context, index) {
-        final s = _servers[index];
-        return _buildSlidableRow(s);
-      },
+    return SafeArea(
+      top: false,
+      child: SingleChildScrollView(
+        physics: const BouncingScrollPhysics(
+          parent: AlwaysScrollableScrollPhysics(),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 18, 16, 32),
+          child: Container(
+            decoration: BoxDecoration(
+              color: AppColors.of(AppColors.card),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            clipBehavior: Clip.hardEdge,
+            child: Column(
+              children: [
+                for (var i = 0; i < _servers.length; i++) ...[
+                  if (i > 0)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 16),
+                      child: Container(
+                        height: 0.5,
+                        color: AppColors.of(AppColors.separator),
+                      ),
+                    ),
+                  _buildSlidableRow(_servers[i]),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -229,93 +245,92 @@ class _ServerManagementPageState extends State<ServerManagementPage> {
       if (!active)
         SlidableAction(
           onPressed: (_) => _switchTo(s),
-          backgroundColor: CupertinoColors.activeBlue,
-          foregroundColor: Colors.white,
-          icon: Icons.link,
+          backgroundColor: CupertinoColors.systemBlue,
+          foregroundColor: CupertinoColors.white,
+          icon: CupertinoIcons.link,
           label: '连接',
         ),
       SlidableAction(
         onPressed: (_) => _editServer(s),
         backgroundColor: CupertinoColors.systemOrange,
-        foregroundColor: Colors.white,
-        icon: Icons.edit,
+        foregroundColor: CupertinoColors.white,
+        icon: CupertinoIcons.pencil,
         label: '编辑',
       ),
       SlidableAction(
         onPressed: (_) => _confirmDelete(s),
-        backgroundColor: CupertinoColors.destructiveRed,
-        foregroundColor: Colors.white,
-        icon: Icons.delete,
+        backgroundColor: CupertinoColors.systemRed,
+        foregroundColor: CupertinoColors.white,
+        icon: CupertinoIcons.delete,
         label: '删除',
       ),
     ];
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(16),
-      child: Slidable(
-        key: ValueKey('${s.url}|${s.username}'),
-        endActionPane: ActionPane(
-          motion: const ScrollMotion(),
-          // 每项约占 1/4 宽，按按钮数量分配滑出区域
-          extentRatio: active ? 0.5 : 0.72,
-          children: actions,
-        ),
-        child: _buildServerTile(s, active),
+    return Slidable(
+      key: ValueKey('${s.url}|${s.username}'),
+      endActionPane: ActionPane(
+        motion: const ScrollMotion(),
+        extentRatio: active ? 0.5 : 0.72,
+        children: actions,
       ),
+      child: _buildServerTile(s, active),
     );
   }
 
   Widget _buildServerTile(ServerConfig s, bool active) {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTap: () => _switchTo(s), // 点击服务器行即连接
-      child: Container(
+      onTap: () => _switchTo(s),
+      child: ColoredBox(
         color: AppColors.of(AppColors.card),
         child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        child: Row(
-          children: [
-            Icon(
-              active
-                  ? CupertinoIcons.checkmark_circle_fill
-                  : CupertinoIcons.circle,
-              color: active ? _accent : AppColors.of(AppColors.placeholder),
-              size: 22,
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    _label(s),
-                    style: TextStyle(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: Row(
+            children: [
+              Icon(
+                active
+                    ? CupertinoIcons.checkmark_circle_fill
+                    : CupertinoIcons.circle,
+                color: active
+                    ? CupertinoColors.systemBlue
+                    : AppColors.of(AppColors.placeholder),
+                size: 22,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _label(s),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTypography.body().copyWith(
                         fontSize: 16,
-                        color: _ink,
                         fontWeight:
-                            active ? FontWeight.w700 : FontWeight.w500),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    '${s.url}  ·  ${s.username}',
-                    style: const TextStyle(fontSize: 12, color: _inkMuted),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
+                            active ? FontWeight.w700 : FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${s.url}  ·  ${s.username}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTypography.caption(),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            if (active)
-              const Padding(
-                padding: EdgeInsets.only(left: 8),
-                child: Text('使用中',
-                    style: TextStyle(
-                        fontSize: 12,
-                        color: _accent,
-                        fontWeight: FontWeight.w600)),
-              ),
-          ],
+              if (active)
+                Padding(
+                  padding: const EdgeInsets.only(left: 8),
+                  child: Text(
+                    '使用中',
+                    style: AppTypography.caption(
+                      color: CupertinoColors.systemBlue,
+                    ).copyWith(fontWeight: FontWeight.w600),
+                  ),
+                ),
+            ],
           ),
         ),
       ),
