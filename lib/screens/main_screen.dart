@@ -797,10 +797,6 @@ class _ServerSettingsPageState extends State<ServerSettingsPage> {
       backgroundColor: AppColors.of(AppColors.groupedBg),
       decoration: BoxDecoration(color: AppColors.of(AppColors.card)),
       header: Text('安全', style: AppTypography.sectionHeader()),
-      footer: Text(
-        '开启后，打开 App 或从后台切回时需通过 $lockName 验证。',
-        style: AppTypography.subtitle(),
-      ),
       children: [
         CupertinoListTile(
           leading: const Icon(
