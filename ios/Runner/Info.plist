@@ -50,5 +50,7 @@
 		<!-- TrollStore 劫持的系统 scheme：用于 install?url= 唤起安装 -->
 		<string>apple-magnifier</string>
 	</array>
+	<key>NSFaceIDUsageDescription</key>
+	<string>用于在打开 Orbix 时通过 Face ID 验证你的身份，保护服务器与下载信息。</string>
 </dict>
 </plist>

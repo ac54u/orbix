@@ -1,7 +1,7 @@
 name: orbix
 description: "A premium qBittorrent client for iOS."
 publish_to: 'none'
-version: 1.0.3+4
+version: 1.0.4+5
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -21,6 +21,7 @@ dependencies:
   url_launcher: ^6.3.0       # 打开 release 页 / ipa 直链（兜底）
   share_plus: ^10.1.1        # 下载完 ipa 后唤起 iOS 原生分享面板 → 拷贝到 TrollStore
   path_provider: ^2.1.4      # 临时目录，存放下载的 ipa
+  local_auth: ^2.3.0         # iOS 原生 Face ID / 生物识别，用于应用锁
 
 dev_dependencies:
   flutter_test:
