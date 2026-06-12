@@ -1,7 +1,10 @@
 import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:get/get.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../services/qbit_api.dart';
+import '../services/update_service.dart';
 import 'add_torrent_screen.dart';
 import 'torrent_detail_screen.dart';
 import 'server_management_screen.dart';
@@ -24,6 +27,9 @@ class _MainScreenState extends State<MainScreen> {
   int _currentIndex = 0;
   Timer? _refreshTimer;
   String _filter = 'all'; // 当前筛选：all/downloading/seeding/active/paused/completed
+  // 服务器代次：每切换一次服务器 +1。用作统计/搜索页的 key，
+  // 强制重建这两个 IndexedStack 子树，丢弃上一个服务器的缓存数据。
+  int _serverEpoch = 0;
 
   // 动态数据源
   List<dynamic> _torrents = [];
@@ -181,74 +187,61 @@ class _MainScreenState extends State<MainScreen> {
   bool _isPaused(String state) =>
       state.startsWith('stopped') || state.startsWith('paused');
 
-  /// 用 CupertinoContextMenu 包裹种子卡片：长按后卡片浮起放大、背景模糊，
-  /// 操作项从卡片处展开（iOS 原生「3D Touch / Haptic Touch」效果）。
-  Widget _wrapWithContextMenu({
-    required String hash,
-    required String name,
-    required String state,
-    required Widget card,
-  }) {
+  /// 长按种子行 → 原生 ActionSheet（启动/暂停、强制启动、校验、汇报、删除）。
+  ///
+  /// 不再用 `CupertinoContextMenu`：它内部自带 TapGestureRecognizer 抢点击，
+  /// 与外层 onTap 在手势竞技场里竞争，导致「点击详情偶尔无反应」。改为
+  /// 由行自身的 GestureDetector 独占 onTap/onLongPress，点击 100% 可靠。
+  void _showTorrentActions(String hash, String name, String state) {
     final paused = _isPaused(state);
-    return CupertinoContextMenu(
-      actions: [
-        if (paused)
-          CupertinoContextMenuAction(
-            trailingIcon: CupertinoIcons.play_fill,
-            onPressed: () {
-              Navigator.pop(context);
-              _runAction(() => QBitApi().startTorrent(hash), '已启动');
-            },
-            child: const Text('启动'),
-          )
-        else
-          CupertinoContextMenuAction(
-            trailingIcon: CupertinoIcons.pause_fill,
-            onPressed: () {
-              Navigator.pop(context);
-              _runAction(() => QBitApi().stopTorrent(hash), '已暂停');
-            },
-            child: const Text('暂停'),
+    void run(Future<bool> Function() action, String ok) {
+      Navigator.pop(context);
+      _runAction(action, ok);
+    }
+
+    showCupertinoModalPopup<void>(
+      context: context,
+      builder: (ctx) => CupertinoActionSheet(
+        title: Text(name, maxLines: 2, overflow: TextOverflow.ellipsis),
+        actions: [
+          if (paused)
+            CupertinoActionSheetAction(
+              onPressed: () => run(() => QBitApi().startTorrent(hash), '已启动'),
+              child: const Text('启动'),
+            )
+          else
+            CupertinoActionSheetAction(
+              onPressed: () => run(() => QBitApi().stopTorrent(hash), '已暂停'),
+              child: const Text('暂停'),
+            ),
+          CupertinoActionSheetAction(
+            onPressed: () =>
+                run(() => QBitApi().forceStartTorrent(hash), '已强制启动'),
+            child: const Text('强制启动'),
           ),
-        CupertinoContextMenuAction(
-          trailingIcon: CupertinoIcons.bolt_fill,
-          onPressed: () {
-            Navigator.pop(context);
-            _runAction(() => QBitApi().forceStartTorrent(hash), '已强制启动');
-          },
-          child: const Text('强制启动'),
+          CupertinoActionSheetAction(
+            onPressed: () =>
+                run(() => QBitApi().recheckTorrent(hash), '已开始重新校验'),
+            child: const Text('强制重新校验'),
+          ),
+          CupertinoActionSheetAction(
+            onPressed: () =>
+                run(() => QBitApi().reannounceTorrent(hash), '已重新汇报'),
+            child: const Text('强制重新汇报'),
+          ),
+          CupertinoActionSheetAction(
+            isDestructiveAction: true,
+            onPressed: () {
+              Navigator.pop(ctx);
+              _confirmDelete(hash, name);
+            },
+            child: const Text('删除'),
+          ),
+        ],
+        cancelButton: CupertinoActionSheetAction(
+          onPressed: () => Navigator.pop(ctx),
+          child: const Text('取消'),
         ),
-        CupertinoContextMenuAction(
-          trailingIcon: CupertinoIcons.checkmark_shield,
-          onPressed: () {
-            Navigator.pop(context);
-            _runAction(() => QBitApi().recheckTorrent(hash), '已开始重新校验');
-          },
-          child: const Text('强制重新校验'),
-        ),
-        CupertinoContextMenuAction(
-          trailingIcon: CupertinoIcons.antenna_radiowaves_left_right,
-          onPressed: () {
-            Navigator.pop(context);
-            _runAction(() => QBitApi().reannounceTorrent(hash), '已重新汇报');
-          },
-          child: const Text('强制重新汇报'),
-        ),
-        CupertinoContextMenuAction(
-          isDestructiveAction: true,
-          trailingIcon: CupertinoIcons.delete,
-          onPressed: () {
-            Navigator.pop(context);
-            _confirmDelete(hash, name);
-          },
-          child: const Text('删除'),
-        ),
-      ],
-      // 浮层中补 DefaultTextStyle 兜底，避免长按放大时出现「缺省样式」
-      // 黄色下划线；新版行内 Text 都显式带样式，这层是安全网。
-      child: DefaultTextStyle(
-        style: AppTypography.body(),
-        child: card,
       ),
     );
   }
@@ -328,12 +321,16 @@ class _MainScreenState extends State<MainScreen> {
                 index: _currentIndex,
                 children: [
                   _buildTorrentPage(),
-                  const StatsScreen(),
-                  const SearchScreen(),
+                  StatsScreen(key: ValueKey('stats-$_serverEpoch')),
+                  SearchScreen(key: ValueKey('search-$_serverEpoch')),
                   ServerSettingsPage(
-                    // 切换服务器后回到「种子」页并立即刷新，给出直观反馈
+                    // 切换服务器后回到「种子」页并立即刷新；同时 +1 服务器代次，
+                    // 让统计/搜索页丢弃上一个服务器的缓存、按新服务器重建。
                     onSwitched: () {
-                      setState(() => _currentIndex = 0);
+                      setState(() {
+                        _currentIndex = 0;
+                        _serverEpoch++;
+                      });
                       _fetchData();
                     },
                   ),
@@ -576,6 +573,9 @@ class _MainScreenState extends State<MainScreen> {
       addSpan(_formatEta(eta));
     }
 
+    // 0.5pt 真实 hairline：把原来 2pt 的进度/分隔线减细到与统计页一致的厚度，
+    // 但仍保留进度——左侧按比例上色，右侧走 separator 灰，兼当行间分隔。
+    final hairline = 1 / MediaQuery.devicePixelRatioOf(context);
     final row = Column(
       children: [
         Padding(
@@ -613,8 +613,7 @@ class _MainScreenState extends State<MainScreen> {
                           child: Text(
                             _formatSize(totalSize),
                             style: AppTypography.caption(
-                                color:
-                                    AppColors.of(AppColors.tertiaryLabel)),
+                                color: AppColors.of(AppColors.tertiaryLabel)),
                           ),
                         ),
                       ],
@@ -631,9 +630,8 @@ class _MainScreenState extends State<MainScreen> {
             ],
           ),
         ),
-        // 2pt 极细进度线，贴底；本身充当行间分隔。
         SizedBox(
-          height: 2,
+          height: hairline,
           child: Stack(
             children: [
               Container(color: AppColors.of(AppColors.separator)),
@@ -651,14 +649,9 @@ class _MainScreenState extends State<MainScreen> {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: hash.isEmpty ? null : () => _openDetail(t),
-      child: hash.isEmpty
-          ? row
-          : _wrapWithContextMenu(
-              hash: hash,
-              name: name,
-              state: rawState,
-              card: row,
-            ),
+      onLongPress:
+          hash.isEmpty ? null : () => _showTorrentActions(hash, name, rawState),
+      child: row,
     );
   }
 
@@ -736,10 +729,23 @@ class _ServerSettingsPageState extends State<ServerSettingsPage> {
   String? _version;
   bool _loading = true;
 
+  // —— 应用自更新 ——
+  String? _appVersion; // 当前 app 版本（package_info）
+  UpdateCheck? _update; // 最近一次 GitHub 检查结果
+  bool _checking = false;
+
   @override
   void initState() {
     super.initState();
     _load();
+    _loadAppVersion();
+    _checkUpdate(silent: true); // 启动静默检查，有新版自动在设置页提示
+  }
+
+  Future<void> _loadAppVersion() async {
+    final v = await PackageInfo.fromPlatform();
+    if (!mounted) return;
+    setState(() => _appVersion = v.version);
   }
 
   Future<void> _load() async {
@@ -770,6 +776,132 @@ class _ServerSettingsPageState extends State<ServerSettingsPage> {
     await _load();
   }
 
+  // —— 检查更新 ——
+  // silent=true：启动时静默检查，仅刷新提示，不打扰；
+  // silent=false：用户主动点「检查更新」，结果用 toast / 弹窗即时反馈。
+  Future<void> _checkUpdate({required bool silent}) async {
+    if (_checking) return;
+    setState(() => _checking = true);
+    final result = await UpdateService.instance.check();
+    if (!mounted) return;
+    setState(() {
+      _update = result;
+      _checking = false;
+    });
+    if (silent) return;
+    if (result.error != null) {
+      Toast.show(context, result.error!, type: ToastType.error);
+    } else if (result.hasUpdate && result.latest != null) {
+      _showUpdateSheet(result.latest!);
+    } else {
+      Toast.show(context, '已是最新版本', type: ToastType.success);
+    }
+  }
+
+  // 交给 TrollStore 下载并安装；失败兜底为打开 release 网页。
+  Future<void> _install(AppRelease rel) async {
+    final ts = Uri.parse(UpdateService.trollStoreInstallUrl(rel.ipaUrl));
+    try {
+      if (await launchUrl(ts, mode: LaunchMode.externalApplication)) return;
+    } catch (_) {}
+    try {
+      await launchUrl(Uri.parse(rel.htmlUrl),
+          mode: LaunchMode.externalApplication);
+    } catch (_) {
+      if (mounted) {
+        Toast.show(context, '无法唤起 TrollStore 安装', type: ToastType.error);
+      }
+    }
+  }
+
+  String _fmtMB(int bytes) =>
+      bytes <= 0 ? '' : '${(bytes / 1048576).toStringAsFixed(1)} MB';
+
+  // 新版本详情表：标题 + 更新日志（可滚动）+ 下载并安装。
+  void _showUpdateSheet(AppRelease rel) {
+    final size = _fmtMB(rel.ipaSize);
+    showCupertinoModalPopup<void>(
+      context: context,
+      builder: (ctx) => CupertinoActionSheet(
+        title: Text('新版本 ${rel.tag}'),
+        message: Align(
+          alignment: Alignment.centerLeft,
+          child: Text(
+            rel.notes.isEmpty ? '本次没有提供更新说明。' : rel.notes,
+            textAlign: TextAlign.left,
+            style: AppTypography.subtitle(),
+          ),
+        ),
+        actions: [
+          CupertinoActionSheetAction(
+            isDefaultAction: true,
+            onPressed: () {
+              Navigator.pop(ctx);
+              _install(rel);
+            },
+            child: Text(size.isEmpty ? '下载并安装' : '下载并安装 · $size'),
+          ),
+        ],
+        cancelButton: CupertinoActionSheetAction(
+          onPressed: () => Navigator.pop(ctx),
+          child: const Text('取消'),
+        ),
+      ),
+    );
+  }
+
+  // 应用 section：发现新版高亮入口 + 当前版本 + 检查更新。
+  Widget _buildUpdateSection() {
+    final up = _update;
+    final rel = up?.latest;
+    final hasUpdate = up?.hasUpdate == true && rel != null;
+    return CupertinoListSection.insetGrouped(
+      backgroundColor: AppColors.of(AppColors.groupedBg),
+      decoration: BoxDecoration(color: AppColors.of(AppColors.card)),
+      header: Text('应用', style: AppTypography.sectionHeader()),
+      children: [
+        if (hasUpdate)
+          CupertinoListTile.notched(
+            leading: const Icon(
+              CupertinoIcons.arrow_down_circle_fill,
+              color: AppColors.accent,
+              size: 22,
+            ),
+            title: Text(
+              '发现新版本 ${rel.tag}',
+              style: AppTypography.body().copyWith(
+                fontWeight: FontWeight.w600,
+                color: AppColors.accent.resolveFrom(context),
+              ),
+            ),
+            subtitle: Text('点击查看更新内容并安装', style: AppTypography.subtitle()),
+            trailing: const CupertinoListTileChevron(),
+            onTap: () => _showUpdateSheet(rel),
+          ),
+        CupertinoListTile(
+          title: Text('当前版本', style: AppTypography.body()),
+          additionalInfo:
+              Text(_appVersion ?? '—', style: AppTypography.subtitle()),
+        ),
+        CupertinoListTile.notched(
+          title: Text('检查更新', style: AppTypography.body()),
+          additionalInfo: _checking
+              ? const CupertinoActivityIndicator(radius: 9)
+              : Text(
+                  up == null ? '' : (hasUpdate ? '有新版本' : '已是最新'),
+                  style: AppTypography.subtitle(
+                    color: hasUpdate
+                        ? AppColors.accent.resolveFrom(context)
+                        : AppColors.of(AppColors.tertiaryLabel),
+                  ),
+                ),
+          trailing: const CupertinoListTileChevron(),
+          onTap: _checking ? null : () => _checkUpdate(silent: false),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     AppColors.watch(context);
@@ -791,6 +923,7 @@ class _ServerSettingsPageState extends State<ServerSettingsPage> {
                 _loading
                     ? _buildServerSectionSkeleton()
                     : _buildServerSection(),
+                _buildUpdateSection(),
               ],
             ),
           ),
