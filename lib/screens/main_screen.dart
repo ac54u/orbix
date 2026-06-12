@@ -626,6 +626,11 @@ class _ServerSettingsPageState extends State<ServerSettingsPage> {
   UpdateCheck? _update; // 最近一次 GitHub 检查结果
   bool _checking = false;
 
+  // 内联下载状态（取代弹窗）：点更新即下载，进度直接画在更新卡片上。
+  bool _downloading = false;
+  double _dlProgress = 0;
+  CancelToken? _dlCancel;
+
   // —— 应用锁（Face ID）——
   bool _lockEnabled = false; // 开关当前状态
   bool _lockSupported = false; // 设备是否支持生物识别/设备密码
@@ -727,99 +732,52 @@ class _ServerSettingsPageState extends State<ServerSettingsPage> {
     if (result.error != null) {
       Toast.show(context, result.error!, type: ToastType.error);
     } else if (result.hasUpdate && result.latest != null) {
-      _showUpdateSheet(result.latest!);
+      // 不再弹确认框：更新卡片已随 setState 出现在上方，直接提示即可。
+      Toast.show(context, '发现新版本 ${result.latest!.tag}',
+          type: ToastType.success);
     } else {
       Toast.show(context, '已是最新版本', type: ToastType.success);
     }
   }
 
-  // App 内下载 ipa（带进度）→ 完成后唤起 iOS 原生分享面板，
-  // 由用户选「拷贝到 TrollStore」完成安装。全程不依赖 apple-magnifier scheme。
+  // 点更新即下载：App 内下载 ipa（进度内联在卡片上）→ 完成后唤起 iOS 原生
+  // 分享面板，由用户选「拷贝到 TrollStore」完成安装。不依赖任何 URL scheme。
   Future<void> _install(AppRelease rel) async {
-    final progress = ValueNotifier<double>(0);
-    final cancelToken = CancelToken();
-    var dialogOpen = true;
-
-    void closeDialog() {
-      if (dialogOpen && mounted) {
-        dialogOpen = false;
-        Navigator.of(context, rootNavigator: true).pop();
-      }
-    }
-
-    showCupertinoDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => CupertinoAlertDialog(
-        title: const Text('正在下载更新'),
-        content: Padding(
-          padding: const EdgeInsets.only(top: 14),
-          child: ValueListenableBuilder<double>(
-            valueListenable: progress,
-            builder: (_, p, __) => Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(3),
-                  child: SizedBox(
-                    height: 5,
-                    child: Stack(children: [
-                      Container(color: AppColors.of(AppColors.separator)),
-                      FractionallySizedBox(
-                        alignment: Alignment.centerLeft,
-                        widthFactor: p.clamp(0.0, 1.0),
-                        child: Container(
-                            color: AppColors.accent.resolveFrom(ctx)),
-                      ),
-                    ]),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Text('${(p * 100).toStringAsFixed(0)}%',
-                    style: AppTypography.subtitle()),
-              ],
-            ),
-          ),
-        ),
-        actions: [
-          CupertinoDialogAction(
-            isDestructiveAction: true,
-            onPressed: () => cancelToken.cancel('cancelled'),
-            child: const Text('取消'),
-          ),
-        ],
-      ),
-    );
-
+    if (_downloading) return;
+    final cancel = CancelToken();
+    setState(() {
+      _downloading = true;
+      _dlProgress = 0;
+      _dlCancel = cancel;
+    });
     try {
       final path = await UpdateService.instance.downloadIpa(
         rel,
-        cancelToken: cancelToken,
+        cancelToken: cancel,
         onProgress: (r, t) {
-          if (t > 0) progress.value = r / t;
+          if (t > 0 && mounted) setState(() => _dlProgress = r / t);
         },
       );
-      closeDialog();
       if (!mounted) return;
+      setState(() => _downloading = false);
       // iPad 上分享面板是 popover，需锚点；iPhone 上忽略。
       final box = context.findRenderObject() as RenderBox?;
-      final origin = box != null
-          ? box.localToGlobal(Offset.zero) & box.size
-          : null;
+      final origin =
+          box != null ? box.localToGlobal(Offset.zero) & box.size : null;
       await Share.shareXFiles(
         [XFile(path, name: 'Orbix-${rel.tag}.ipa')],
         subject: 'Orbix ${rel.tag}',
         sharePositionOrigin: origin,
       );
     } on DioException catch (e) {
-      closeDialog();
+      if (!mounted) return;
+      setState(() => _downloading = false);
       if (CancelToken.isCancel(e)) return; // 用户主动取消，静默
-      if (mounted) {
-        Toast.show(context, '下载失败，请检查网络', type: ToastType.error);
-      }
+      Toast.show(context, '下载失败，请检查网络', type: ToastType.error);
     } catch (_) {
-      closeDialog();
-      if (mounted) Toast.show(context, '下载失败', type: ToastType.error);
+      if (!mounted) return;
+      setState(() => _downloading = false);
+      Toast.show(context, '下载失败', type: ToastType.error);
     }
   }
 
@@ -832,49 +790,6 @@ class _ServerSettingsPageState extends State<ServerSettingsPage> {
   String _fmtMB(int bytes) =>
       bytes <= 0 ? '' : '${(bytes / 1048576).toStringAsFixed(1)} MB';
 
-  // 新版本详情表：标题 + 更新日志（可滚动）+ 下载并安装。
-  void _showUpdateSheet(AppRelease rel) {
-    final size = _fmtMB(rel.ipaSize);
-    showCupertinoModalPopup<void>(
-      context: context,
-      builder: (ctx) => CupertinoActionSheet(
-        title: Text('新版本 ${rel.tag}'),
-        message: Align(
-          alignment: Alignment.centerLeft,
-          child: Text(
-            rel.notes.isEmpty ? '本次没有提供更新说明。' : rel.notes,
-            textAlign: TextAlign.left,
-            style: AppTypography.subtitle(),
-          ),
-        ),
-        actions: [
-          CupertinoActionSheetAction(
-            isDefaultAction: true,
-            onPressed: () {
-              Navigator.pop(ctx);
-              _install(rel);
-            },
-            child: Text(size.isEmpty
-                ? '下载并安装'
-                : '下载并安装 · $size'),
-          ),
-          CupertinoActionSheetAction(
-            onPressed: () {
-              Navigator.pop(ctx);
-              _copyIpaLink(rel);
-            },
-            child: const Text('复制下载链接'),
-          ),
-        ],
-        cancelButton: CupertinoActionSheetAction(
-          onPressed: () => Navigator.pop(ctx),
-          child: const Text('取消'),
-        ),
-      ),
-    );
-  }
-
-  // 应用 section：发现新版高亮入口 + 当前版本 + 检查更新。
   // 安全 section：Face ID / 生物识别应用锁开关。
   Widget _buildSecuritySection() {
     final lockName = _hasFaceId ? 'Face ID' : '生物识别';
@@ -909,48 +824,184 @@ class _ServerSettingsPageState extends State<ServerSettingsPage> {
     final up = _update;
     final rel = up?.latest;
     final hasUpdate = up?.hasUpdate == true && rel != null;
-    return CupertinoListSection.insetGrouped(
-      backgroundColor: AppColors.of(AppColors.groupedBg),
-      decoration: BoxDecoration(color: AppColors.of(AppColors.card)),
-      header: Text('应用', style: AppTypography.sectionHeader()),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (hasUpdate)
-          CupertinoListTile.notched(
-            leading: const Icon(
-              CupertinoIcons.arrow_down_circle_fill,
-              color: AppColors.accent,
-              size: 22,
+        if (hasUpdate) _buildUpdateCard(rel),
+        CupertinoListSection.insetGrouped(
+          backgroundColor: AppColors.of(AppColors.groupedBg),
+          decoration: BoxDecoration(color: AppColors.of(AppColors.card)),
+          header: Text('应用', style: AppTypography.sectionHeader()),
+          children: [
+            CupertinoListTile(
+              title: Text('当前版本', style: AppTypography.body()),
+              additionalInfo:
+                  Text(_appVersion ?? '—', style: AppTypography.subtitle()),
             ),
-            title: Text(
-              '发现新版本 ${rel.tag}',
-              style: AppTypography.body().copyWith(
-                fontWeight: FontWeight.w600,
-                color: AppColors.accent.resolveFrom(context),
+            CupertinoListTile.notched(
+              title: Text('检查更新', style: AppTypography.body()),
+              additionalInfo: _checking
+                  ? const CupertinoActivityIndicator(radius: 9)
+                  : Text(
+                      up == null ? '' : (hasUpdate ? '有新版本' : '已是最新'),
+                      style: AppTypography.subtitle(
+                        color: hasUpdate
+                            ? AppColors.accent.resolveFrom(context)
+                            : AppColors.of(AppColors.tertiaryLabel),
+                      ),
+                    ),
+              trailing: const CupertinoListTileChevron(),
+              onTap: _checking ? null : () => _checkUpdate(silent: false),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  // 发现新版时的高亮卡片：版本/体积/更新日志 + 「立即更新」。
+  // 点「立即更新」即开始下载，进度内联（不弹确认框、不弹下载框）。
+  Widget _buildUpdateCard(AppRelease rel) {
+    final accent = AppColors.accent.resolveFrom(context);
+    final size = _fmtMB(rel.ipaSize);
+    final notes = rel.notes.trim();
+    final meta = [
+      if (size.isNotEmpty) size,
+      '当前 ${_appVersion ?? '—'}',
+    ].join('  ·  ');
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: AppColors.of(AppColors.card),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: accent.withValues(alpha: 0.22)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 46,
+                height: 46,
+                decoration: BoxDecoration(
+                  color: AppColors.of(AppColors.accentSoftBg),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(CupertinoIcons.sparkles, color: accent, size: 24),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('新版本 ${rel.tag}', style: AppTypography.cardTitle()),
+                    const SizedBox(height: 3),
+                    Text(meta, style: AppTypography.subtitle()),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          if (notes.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.of(AppColors.plainBg),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                notes,
+                style: AppTypography.subtitle(),
+                maxLines: 6,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
-            subtitle: Text('点击查看更新内容并安装', style: AppTypography.subtitle()),
-            trailing: const CupertinoListTileChevron(),
-            onTap: () => _showUpdateSheet(rel),
+          ],
+          const SizedBox(height: 18),
+          _downloading ? _buildDownloadingArea() : _buildUpdateActions(rel),
+        ],
+      ),
+    );
+  }
+
+  // 空闲态：「立即更新」主按钮 + 复制直链兜底。
+  Widget _buildUpdateActions(AppRelease rel) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SizedBox(
+          width: double.infinity,
+          child: CupertinoButton.filled(
+            padding: const EdgeInsets.symmetric(vertical: 13),
+            borderRadius: BorderRadius.circular(12),
+            onPressed: () => _install(rel),
+            child: const Text('立即更新',
+                style: TextStyle(fontWeight: FontWeight.w600)),
           ),
-        CupertinoListTile(
-          title: Text('当前版本', style: AppTypography.body()),
-          additionalInfo:
-              Text(_appVersion ?? '—', style: AppTypography.subtitle()),
         ),
-        CupertinoListTile.notched(
-          title: Text('检查更新', style: AppTypography.body()),
-          additionalInfo: _checking
-              ? const CupertinoActivityIndicator(radius: 9)
-              : Text(
-                  up == null ? '' : (hasUpdate ? '有新版本' : '已是最新'),
-                  style: AppTypography.subtitle(
-                    color: hasUpdate
-                        ? AppColors.accent.resolveFrom(context)
-                        : AppColors.of(AppColors.tertiaryLabel),
-                  ),
+        const SizedBox(height: 4),
+        Center(
+          child: CupertinoButton(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            minimumSize: Size.zero,
+            onPressed: () => _copyIpaLink(rel),
+            child: Text('复制下载链接', style: AppTypography.subtitle()),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // 下载中：内联进度条 + 百分比 + 取消。
+  Widget _buildDownloadingArea() {
+    final accent = AppColors.accent.resolveFrom(context);
+    final pct = (_dlProgress * 100).clamp(0, 100).toStringAsFixed(0);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text('正在下载…', style: AppTypography.body()),
+            Text('$pct%',
+                style: AppTypography.body().copyWith(
+                    color: accent, fontWeight: FontWeight.w600)),
+          ],
+        ),
+        const SizedBox(height: 12),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(3),
+          child: SizedBox(
+            height: 6,
+            child: Stack(
+              children: [
+                Positioned.fill(
+                  child: ColoredBox(color: AppColors.of(AppColors.separator)),
                 ),
-          trailing: const CupertinoListTileChevron(),
-          onTap: _checking ? null : () => _checkUpdate(silent: false),
+                FractionallySizedBox(
+                  alignment: Alignment.centerLeft,
+                  widthFactor: _dlProgress.clamp(0.0, 1.0),
+                  child: ColoredBox(color: accent),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 6),
+        Align(
+          alignment: Alignment.centerRight,
+          child: CupertinoButton(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            minimumSize: Size.zero,
+            onPressed: () => _dlCancel?.cancel('cancelled'),
+            child: Text('取消',
+                style:
+                    AppTypography.subtitle(color: AppColors.of(AppColors.danger))),
+          ),
         ),
       ],
     );
