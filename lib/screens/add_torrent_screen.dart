@@ -203,6 +203,8 @@ class _AddTorrentScreenState extends State<AddTorrentScreen> {
   // —— 链接输入 section：单 tile 多行文本 ——
   Widget _buildLinkSection() {
     return CupertinoListSection.insetGrouped(
+      backgroundColor: AppColors.of(AppColors.groupedBg),
+      decoration: BoxDecoration(color: AppColors.of(AppColors.card)),
       header: Text('种子链接', style: AppTypography.sectionHeader()),
       footer: Text(
         '支持 magnet: 或 http(s) 链接，可多行批量添加',
@@ -233,6 +235,8 @@ class _AddTorrentScreenState extends State<AddTorrentScreen> {
   Widget _buildFileSection() {
     final picked = _pickedName != null;
     return CupertinoListSection.insetGrouped(
+      backgroundColor: AppColors.of(AppColors.groupedBg),
+      decoration: BoxDecoration(color: AppColors.of(AppColors.card)),
       header: Text('种子文件', style: AppTypography.sectionHeader()),
       footer: Text(
         '从「文件」App 选择 .torrent 文件',
@@ -285,6 +289,8 @@ class _AddTorrentScreenState extends State<AddTorrentScreen> {
   // —— 可选设置 section：key/value 行 ——
   Widget _buildOptionsSection() {
     return CupertinoFormSection.insetGrouped(
+      backgroundColor: AppColors.of(AppColors.groupedBg),
+      decoration: BoxDecoration(color: AppColors.of(AppColors.card)),
       header: Text('可选设置', style: AppTypography.sectionHeader()),
       children: [
         _kvRow('分类', '点击输入', _categoryController),

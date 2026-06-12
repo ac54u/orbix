@@ -191,6 +191,8 @@ class _ServerSelectionPageState extends State<ServerSelectionPage> {
           ),
         ),
         CupertinoListSection.insetGrouped(
+          backgroundColor: AppColors.of(AppColors.groupedBg),
+          decoration: BoxDecoration(color: AppColors.of(AppColors.card)),
           margin: const EdgeInsets.symmetric(horizontal: 16),
           topMargin: 0,
           children: _servers.map(_buildServerTile).toList(),
