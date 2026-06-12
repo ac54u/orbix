@@ -7,6 +7,7 @@ import 'package:dio/dio.dart';
 import 'package:share_plus/share_plus.dart';
 import '../services/qbit_api.dart';
 import '../services/update_service.dart';
+import '../services/app_lock.dart';
 import 'add_torrent_screen.dart';
 import 'torrent_detail_screen.dart';
 import 'server_management_screen.dart';
@@ -17,6 +18,7 @@ import '../theme/app_motion.dart';
 import '../theme/app_typography.dart';
 import '../widgets/skeleton.dart';
 import '../widgets/toast.dart';
+import '../widgets/app_lock_gate.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -559,7 +561,6 @@ class _MainScreenState extends State<MainScreen> {
         child: Padding(
           padding: const EdgeInsets.only(top: 8, bottom: 4),
           child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
               _buildNavItem(0, CupertinoIcons.arrow_down_circle_fill, '种子'),
               _buildNavItem(1, CupertinoIcons.chart_bar_alt_fill, '统计'),
@@ -577,24 +578,29 @@ class _MainScreenState extends State<MainScreen> {
     final color = isSelected
         ? AppColors.accent
         : AppColors.of(AppColors.secondaryLabel);
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: () => setState(() => _currentIndex = index),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, color: color, size: 26),
-          const SizedBox(height: 4),
-          Text(
-            label,
-            style: TextStyle(
-              color: color,
-              fontSize: 10,
-              fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-              letterSpacing: -0.1,
+    // 每格占 1/4 宽并整格可点（含按钮间空隙），消除原 spaceAround 的死区。
+    return Expanded(
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () {
+          if (_currentIndex != index) setState(() => _currentIndex = index);
+        },
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: color, size: 26),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: TextStyle(
+                color: color,
+                fontSize: 10,
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                letterSpacing: -0.1,
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -620,12 +626,55 @@ class _ServerSettingsPageState extends State<ServerSettingsPage> {
   UpdateCheck? _update; // 最近一次 GitHub 检查结果
   bool _checking = false;
 
+  // —— 应用锁（Face ID）——
+  bool _lockEnabled = false; // 开关当前状态
+  bool _lockSupported = false; // 设备是否支持生物识别/设备密码
+  bool _hasFaceId = false; // 是否含 Face ID（决定文案）
+  bool _lockBusy = false; // 正在切换，避免重复触发验证
+
   @override
   void initState() {
     super.initState();
     _load();
     _loadAppVersion();
+    _loadLock();
     _checkUpdate(silent: true); // 启动静默检查，有新版自动在设置页提示
+  }
+
+  Future<void> _loadLock() async {
+    final supported = await AppLock.instance.canAuthenticate();
+    final enabled = await AppLock.instance.isEnabled();
+    final face = supported ? await AppLock.instance.hasFaceId() : false;
+    if (!mounted) return;
+    setState(() {
+      _lockSupported = supported;
+      _lockEnabled = enabled;
+      _hasFaceId = face;
+    });
+  }
+
+  // 切换应用锁：开启时先验证一次本人，确保不会把自己锁在门外。
+  Future<void> _toggleLock(bool value) async {
+    if (_lockBusy) return;
+    setState(() => _lockBusy = true);
+    try {
+      if (value) {
+        final ok = await AppLock.instance
+            .authenticate('验证身份以开启应用锁');
+        if (!ok) {
+          if (mounted) {
+            Toast.show(context, '验证未通过，未开启', type: ToastType.error);
+          }
+          return;
+        }
+      }
+      await AppLock.instance.setEnabled(value);
+      appLockGateKey.currentState?.syncEnabled(value);
+      if (!mounted) return;
+      setState(() => _lockEnabled = value);
+    } finally {
+      if (mounted) setState(() => _lockBusy = false);
+    }
   }
 
   Future<void> _loadAppVersion() async {
@@ -826,6 +875,36 @@ class _ServerSettingsPageState extends State<ServerSettingsPage> {
   }
 
   // 应用 section：发现新版高亮入口 + 当前版本 + 检查更新。
+  // 安全 section：Face ID / 生物识别应用锁开关。
+  Widget _buildSecuritySection() {
+    final lockName = _hasFaceId ? 'Face ID' : '生物识别';
+    return CupertinoListSection.insetGrouped(
+      backgroundColor: AppColors.of(AppColors.groupedBg),
+      decoration: BoxDecoration(color: AppColors.of(AppColors.card)),
+      header: Text('安全', style: AppTypography.sectionHeader()),
+      footer: Text(
+        '开启后，打开 App 或从后台切回时需通过 $lockName 验证。',
+        style: AppTypography.subtitle(),
+      ),
+      children: [
+        CupertinoListTile(
+          leading: const Icon(
+            CupertinoIcons.lock_shield_fill,
+            color: AppColors.accent,
+            size: 22,
+          ),
+          title: Text('$lockName 解锁', style: AppTypography.body()),
+          trailing: _lockBusy
+              ? const CupertinoActivityIndicator(radius: 9)
+              : CupertinoSwitch(
+                  value: _lockEnabled,
+                  onChanged: _toggleLock,
+                ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildUpdateSection() {
     final up = _update;
     final rel = up?.latest;
@@ -898,6 +977,7 @@ class _ServerSettingsPageState extends State<ServerSettingsPage> {
                 _loading
                     ? _buildServerSectionSkeleton()
                     : _buildServerSection(),
+                if (_lockSupported) _buildSecuritySection(),
                 _buildUpdateSection(),
               ],
             ),
