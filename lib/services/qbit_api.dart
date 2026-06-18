@@ -507,7 +507,10 @@ class QBitApi {
       // 能核对且没新增→服务器确实没收到，照实报错。
       if (e.type == DioExceptionType.sendTimeout ||
           e.type == DioExceptionType.receiveTimeout) {
-        return (await addedNew() == false) ? _describeDioError(e) : null;
+        final result = await addedNew();
+        if (result == false) return _describeDioError(e);
+        if (result == null) return '无法确认任务是否添加成功，请刷新列表检查';
+        return null;
       }
       return _describeDioError(e);
     }
