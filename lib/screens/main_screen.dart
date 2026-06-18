@@ -820,37 +820,38 @@ class _ServerSettingsPageState extends State<ServerSettingsPage> {
     final up = _update;
     final rel = up?.latest;
     final hasUpdate = up?.hasUpdate == true && rel != null;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+    return CupertinoListSection.insetGrouped(
+      backgroundColor: AppColors.of(AppColors.groupedBg),
+      decoration: BoxDecoration(color: AppColors.of(AppColors.card)),
+      header: Text('应用', style: AppTypography.sectionHeader()),
       children: [
-        if (hasUpdate) _buildUpdateCard(rel),
-        CupertinoListSection.insetGrouped(
-          backgroundColor: AppColors.of(AppColors.groupedBg),
-          decoration: BoxDecoration(color: AppColors.of(AppColors.card)),
-          header: Text('应用', style: AppTypography.sectionHeader()),
-          children: [
-            CupertinoListTile(
-              title: Text('当前版本', style: AppTypography.body()),
-              additionalInfo:
-                  Text(_appVersion ?? '—', style: AppTypography.subtitle()),
-            ),
-            CupertinoListTile.notched(
-              title: Text('检查更新', style: AppTypography.body()),
-              additionalInfo: _checking
-                  ? const CupertinoActivityIndicator(radius: 9)
-                  : Text(
-                      up == null ? '' : (hasUpdate ? '有新版本' : '已是最新'),
-                      style: AppTypography.subtitle(
-                        color: hasUpdate
-                            ? AppColors.accent.resolveFrom(context)
-                            : AppColors.of(AppColors.tertiaryLabel),
-                      ),
-                    ),
-              trailing: const CupertinoListTileChevron(),
-              onTap: _checking ? null : () => _checkUpdate(silent: false),
-            ),
-          ],
+        CupertinoListTile(
+          leading: const Icon(
+            CupertinoIcons.info_circle_fill,
+            color: AppColors.accent,
+            size: 22,
+          ),
+          title: Text('当前版本', style: AppTypography.body()),
+          additionalInfo:
+              Text(_appVersion ?? '—', style: AppTypography.subtitle()),
         ),
+        CupertinoListTile.notched(
+          title: Text('检查更新', style: AppTypography.body()),
+          additionalInfo: _checking
+              ? const CupertinoActivityIndicator(radius: 9)
+              : Text(
+                  up == null ? '' : (hasUpdate ? '有新版本' : '已是最新'),
+                  style: AppTypography.subtitle(
+                    color: hasUpdate
+                        ? AppColors.accent.resolveFrom(context)
+                        : AppColors.of(AppColors.tertiaryLabel),
+                  ),
+                ),
+          trailing: const CupertinoListTileChevron(),
+          onTap: _checking ? null : () => _checkUpdate(silent: false),
+        ),
+        if (hasUpdate && !_downloading) _buildUpdateCard(rel),
+        if (_downloading) _buildDownloadingArea(),
       ],
     );
   }
@@ -866,59 +867,53 @@ class _ServerSettingsPageState extends State<ServerSettingsPage> {
       '当前 ${_appVersion ?? '—'}',
     ].join('  ·  ');
     return Container(
-      margin: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-      padding: const EdgeInsets.all(18),
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppColors.of(AppColors.card),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: accent.withValues(alpha: 0.22)),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: accent.withValues(alpha: 0.3)),
+        boxShadow: [
+          BoxShadow(
+            color: accent.withValues(alpha: 0.1),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             children: [
-              Container(
-                width: 46,
-                height: 46,
-                decoration: BoxDecoration(
-                  color: AppColors.of(AppColors.accentSoftBg),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(CupertinoIcons.sparkles, color: accent, size: 24),
-              ),
-              const SizedBox(width: 14),
+              Icon(CupertinoIcons.sparkles, color: accent, size: 24),
+              const SizedBox(width: 10),
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('新版本 ${rel.tag}', style: AppTypography.cardTitle()),
-                    const SizedBox(height: 3),
-                    Text(meta, style: AppTypography.subtitle()),
-                  ],
-                ),
+                child: Text('新版本 ${rel.tag}',
+                    style: AppTypography.cardTitle().copyWith(fontSize: 20)),
               ),
             ],
           ),
           if (notes.isNotEmpty) ...[
-            const SizedBox(height: 16),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: AppColors.of(AppColors.plainBg),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Text(
-                notes,
-                style: AppTypography.subtitle(),
-                maxLines: 6,
-                overflow: TextOverflow.ellipsis,
-              ),
+            const SizedBox(height: 10),
+            Text(
+              notes,
+              style: AppTypography.subtitle(),
+              maxLines: 4,
+              overflow: TextOverflow.ellipsis,
             ),
           ],
-          const SizedBox(height: 18),
-          _downloading ? _buildDownloadingArea() : _buildUpdateActions(rel),
+          const SizedBox(height: 14),
+          SizedBox(
+            width: double.infinity,
+            child: CupertinoButton.filled(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              borderRadius: BorderRadius.circular(10),
+              onPressed: () => _install(rel),
+              child: const Text('立即更新',
+                  style: TextStyle(fontWeight: FontWeight.w600)),
+            ),
+          ),
         ],
       ),
     );
