@@ -833,9 +833,15 @@ class _ServerSettingsPageState extends State<ServerSettingsPage> {
           additionalInfo: _checking
               ? const CupertinoActivityIndicator(radius: 9)
               : Text(
-                  up == null ? '' : (hasUpdate ? '有新版本' : '已是最新'),
+                  up == null
+                      ? ''
+                      : (up.error != null
+                          ? '检查失败'
+                          : (hasUpdate ? '有新版本' : '已是最新')),
                   style: AppTypography.subtitle(
-                    color: hasUpdate
+                    color: up?.error != null
+                        ? AppColors.danger.resolveFrom(context)
+                        : hasUpdate
                         ? AppColors.accent.resolveFrom(context)
                         : AppColors.of(AppColors.tertiaryLabel),
                   ),

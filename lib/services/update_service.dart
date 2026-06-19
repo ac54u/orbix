@@ -81,6 +81,7 @@ class UpdateService {
   static const String _prefIpa = 'update_ipa';
   static const String _prefSize = 'update_size';
   static const String _prefHtml = 'update_html';
+  static const String _prefAppVer = 'update_app_ver';
 
   final Dio _dio = Dio(BaseOptions(
     connectTimeout: const Duration(seconds: 8),
@@ -110,13 +111,16 @@ class UpdateService {
   // ── 本地缓存 ────────────────────────────────────────────────────────
 
   /// 尝试从 SharedPreferences 读取未过期的缓存结果。
-  /// 返回 null 表示无缓存或已过期，需要发起网络请求。
-  Future<AppRelease?> _loadCache() async {
+  /// 返回 null 表示无缓存/已过期/app 刚升级，需要发起网络请求。
+  Future<AppRelease?> _loadCache(String currentAppVersion) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final ts = prefs.getInt(_prefTs) ?? 0;
       final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
       if (now - ts > _cacheTtlSeconds) return null;
+      // App 升级后缓存失效：上次存的服务器最新版可能已经比自己还旧。
+      final cachedAppVer = prefs.getString(_prefAppVer) ?? '';
+      if (cachedAppVer != currentAppVersion) return null;
       final ver = prefs.getString(_prefVer);
       if (ver == null || ver.isEmpty) return null;
       return AppRelease(
@@ -128,12 +132,12 @@ class UpdateService {
         htmlUrl: prefs.getString(_prefHtml) ?? '',
       );
     } catch (_) {
-      return null; // SharedPreferences 不可用时跳过缓存
+      return null;
     }
   }
 
-  /// 把 release 写入缓存。
-  Future<void> _saveCache(AppRelease rel) async {
+  /// 把 release 写入缓存（同时记下当前 app 版本，用于升级后自动失效）。
+  Future<void> _saveCache(AppRelease rel, String currentAppVersion) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setInt(_prefTs, DateTime.now().millisecondsSinceEpoch ~/ 1000);
@@ -143,6 +147,7 @@ class UpdateService {
       await prefs.setString(_prefIpa, rel.ipaUrl);
       await prefs.setInt(_prefSize, rel.ipaSize);
       await prefs.setString(_prefHtml, rel.htmlUrl);
+      await prefs.setString(_prefAppVer, currentAppVersion);
     } catch (_) {
       // 缓存写入失败不影响主流程
     }
@@ -156,8 +161,9 @@ class UpdateService {
     final info = await PackageInfo.fromPlatform();
     final current = info.version; // 如 "1.0.0"
 
-    // 1. 命中缓存：直接复用，仅重新比对当前版本（app 可能刚被覆盖安装）。
-    final cached = await _loadCache();
+    // 1. 命中缓存：直接复用，仅重新比对当前版本。
+    //    若 app 刚升级过，缓存的 app 版本与当前不同会自动失效。
+    final cached = await _loadCache(current);
     if (cached != null) {
       final hasUpdate = compareVersions(cached.version, current) > 0;
       return UpdateCheck(
@@ -171,7 +177,7 @@ class UpdateService {
     try {
       final rel = await _fetchLatest();
       if (rel != null) {
-        await _saveCache(rel);
+        await _saveCache(rel, current);
         return UpdateCheck(
           hasUpdate: compareVersions(rel.version, current) > 0,
           currentVersion: current,
@@ -182,7 +188,7 @@ class UpdateService {
       // 404 表示没有正式发布（可能全是 prerelease / draft），回退到列表端点。
       if (e.response?.statusCode != 404) {
         debugPrint('检查更新 /latest 失败: $e');
-        return _rateLimitError(e);
+        return _rateLimitError(e, current);
       }
     }
 
@@ -190,7 +196,7 @@ class UpdateService {
     try {
       final rel = await _fetchFromList();
       if (rel != null) {
-        await _saveCache(rel);
+        await _saveCache(rel, current);
         return UpdateCheck(
           hasUpdate: compareVersions(rel.version, current) > 0,
           currentVersion: current,
@@ -203,7 +209,7 @@ class UpdateService {
           error: '未找到可安装的发布（缺少 .ipa 资源）');
     } on DioException catch (e) {
       debugPrint('检查更新 /releases 列表失败: $e');
-      return _rateLimitError(e);
+      return _rateLimitError(e, current);
     } catch (e) {
       debugPrint('检查更新异常: $e');
       return UpdateCheck(
@@ -256,11 +262,12 @@ class UpdateService {
   }
 
   /// 限流专用错误提示。
-  UpdateCheck _rateLimitError(DioException e) {
+  UpdateCheck _rateLimitError(DioException e, String currentVersion) {
     final msg = e.response?.statusCode == 403
         ? 'GitHub 接口请求过于频繁，请稍后再试'
         : '网络异常，无法连接 GitHub';
-    return UpdateCheck(hasUpdate: false, currentVersion: '', error: msg);
+    return UpdateCheck(
+        hasUpdate: false, currentVersion: currentVersion, error: msg);
   }
 
   /// 把 release 的 .ipa 下载到临时目录，返回本地文件路径。
