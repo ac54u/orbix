@@ -1,15 +1,17 @@
 import 'dart:async';
+
 import 'package:flutter/cupertino.dart';
 import 'package:get/get.dart';
 
 import '../services/qbit_api.dart';
+import '../services/torrent_search_service.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_typography.dart';
 import '../widgets/skeleton.dart';
 import '../widgets/toast.dart';
 import 'torrent_detail_screen.dart';
 
-/// 搜索页：本地任务搜索 + qB 联网搜索引擎（顶部分段切换）。
+/// 搜索页：本地任务搜索 + 141ppv.com 联网爬虫（顶部分段切换）。
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
 
@@ -27,9 +29,8 @@ class _SearchScreenState extends State<SearchScreen> {
 
   // —— 联网 ——
   bool _searching = false;
-  int? _searchId;
-  List<dynamic> _results = [];
-  String? _onlineNotice; // 无插件 / 出错时的友好提示
+  List<Map<String, dynamic>> _results = [];
+  String? _onlineNotice;
   bool _onlineSearched = false;
 
   @override
@@ -40,7 +41,6 @@ class _SearchScreenState extends State<SearchScreen> {
 
   @override
   void dispose() {
-    _cleanupSearch();
     _queryCtrl.dispose();
     super.dispose();
   }
@@ -58,16 +58,6 @@ class _SearchScreenState extends State<SearchScreen> {
     }
   }
 
-  void _cleanupSearch() {
-    final id = _searchId;
-    if (id != null) {
-      final api = QBitApi();
-      api.stopSearch(id);
-      api.deleteSearch(id);
-      _searchId = null;
-    }
-  }
-
   // —— 本地筛选 ——
   List<dynamic> get _localResults {
     final q = _queryCtrl.text.trim().toLowerCase();
@@ -81,12 +71,11 @@ class _SearchScreenState extends State<SearchScreen> {
     return list;
   }
 
-  // —— 联网搜索 ——
+  // —— 联网搜索（141ppv.com 爬虫）——
   Future<void> _runOnlineSearch() async {
     final pattern = _queryCtrl.text.trim();
     if (pattern.isEmpty) return;
     FocusScope.of(context).unfocus();
-    final api = QBitApi();
 
     setState(() {
       _onlineNotice = null;
@@ -95,53 +84,80 @@ class _SearchScreenState extends State<SearchScreen> {
       _results = [];
     });
 
-    final plugins = await api.getSearchPlugins();
+    final items = await TorrentSearchService.instance.search(pattern, pages: 3);
     if (!mounted) return;
-    if (plugins.isEmpty) {
+
+    if (items.isEmpty) {
       setState(() {
         _searching = false;
-        _onlineNotice =
-            '服务端未安装搜索插件。\n请在 qBittorrent 桌面端「搜索 → 搜索插件」中安装并启用插件后再试。';
+        _onlineNotice = '没有找到结果，换个关键字试试';
       });
       return;
     }
-    final hasEnabled = plugins.any((p) => p is Map && p['enabled'] == true);
 
-    _cleanupSearch();
-
-    final id = await api.startSearch(pattern,
-        plugins: hasEnabled ? 'enabled' : 'all');
-    if (!mounted) return;
-    if (id == null) {
-      setState(() {
-        _searching = false;
-        _onlineNotice = '无法启动搜索，请稍后重试。';
-      });
-      return;
-    }
-    _searchId = id;
-    _pollSearch(id);
+    setState(() {
+      _searching = false;
+      _results = items.map(_toResultMap).toList();
+    });
   }
 
-  Future<void> _pollSearch(int id) async {
-    // 最多轮询 ~40 秒，期间持续把已得到的结果刷到界面
-    for (var i = 0; i < 40; i++) {
-      await Future.delayed(const Duration(seconds: 1));
-      if (!mounted || _searchId != id) return;
-      final res = await QBitApi().getSearchResults(id);
-      if (!mounted || _searchId != id) return;
-      if (res != null) {
-        final results = (res['results'] as List?) ?? [];
-        results.sort((a, b) => ((b is Map ? b['nbSeeders'] : 0) as num? ?? 0)
-            .compareTo((a is Map ? a['nbSeeders'] : 0) as num? ?? 0));
-        setState(() => _results = results);
-        if ((res['status'] ?? '').toString() == 'Stopped') {
-          setState(() => _searching = false);
-          return;
-        }
+  Future<void> _loadMore() async {
+    if (_searching) return;
+    setState(() => _searching = true);
+
+    final currentCount = _results.length;
+    final items = await TorrentSearchService.instance.search(
+      _queryCtrl.text.trim(),
+      pages: (currentCount ~/ 20).clamp(2, 10), // 每次多翻几页
+    );
+    if (!mounted) return;
+
+    final seen = _results.map((r) => r['fileUrl'] as String).toSet();
+    for (final item in items) {
+      if (!seen.contains(item.magnet)) {
+        _results.add(_toResultMap(item));
       }
     }
-    if (mounted) setState(() => _searching = false);
+
+    setState(() => _searching = false);
+  }
+
+  Map<String, dynamic> _toResultMap(ScrapedTorrent item) {
+    return {
+      'fileName': item.title.isNotEmpty && item.title != item.code
+          ? '[${item.code}] ${item.title}'
+          : item.code,
+      'fileUrl': item.magnet,
+      'fileSize': _parseSizeBytes(item.size),
+      'nbSeeders': -1,
+      'nbLeechers': -1,
+      'siteUrl': item.pageUrl,
+      'siteName': '141PPV',
+      'descrLink': item.pageUrl,
+    };
+  }
+
+  /// "5.3 GB" → bytes
+  int? _parseSizeBytes(String size) {
+    if (size.isEmpty) return null;
+    final m = RegExp(r'([\d.]+)\s*(TB|GB|MB|KB|B)',
+            caseSensitive: false)
+        .firstMatch(size);
+    if (m == null) return null;
+    final num = double.tryParse(m.group(1)!) ?? 0;
+    final unit = m.group(2)!.toUpperCase();
+    switch (unit) {
+      case 'TB':
+        return (num * 1099511627776).round();
+      case 'GB':
+        return (num * 1073741824).round();
+      case 'MB':
+        return (num * 1048576).round();
+      case 'KB':
+        return (num * 1024).round();
+      default:
+        return num.round();
+    }
   }
 
   Future<void> _addResult(Map result) async {
@@ -189,11 +205,13 @@ class _SearchScreenState extends State<SearchScreen> {
     if (b == 0) return '0 B';
     if (b < 1024) return '${b.toStringAsFixed(0)} B';
     if (b < 1024 * 1024) return '${(b / 1024).toStringAsFixed(2)} KB';
-    if (b < 1024 * 1024 * 1024) return '${(b / 1048576).toStringAsFixed(2)} MB';
+    if (b < 1024 * 1024 * 1024) {
+      return '${(b / 1048576).toStringAsFixed(2)} MB';
+    }
     return '${(b / 1073741824).toStringAsFixed(2)} GB';
   }
 
-  // 状态 → (color, icon)；颜色全走 Cupertino 系统语义色 / AppColors 动态色。
+  // 状态 → (color, icon)
   ({Color color, IconData icon}) _stateInfo(String state) {
     if (['downloading', 'metaDL', 'forcedDL', 'stalledDL'].contains(state)) {
       return (
@@ -248,7 +266,6 @@ class _SearchScreenState extends State<SearchScreen> {
           child: Text('搜索', style: AppTypography.largeTitle()),
         ),
         const SizedBox(height: 14),
-        // 模式切换：iOS 原生滑动分段控件
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20),
           child: CupertinoSlidingSegmentedControl<int>(
@@ -269,7 +286,8 @@ class _SearchScreenState extends State<SearchScreen> {
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: CupertinoSearchTextField(
             controller: _queryCtrl,
-            placeholder: _mode == 0 ? '搜索我的任务' : '输入关键字后回车搜索',
+            placeholder:
+                _mode == 0 ? '搜索我的任务' : '输入关键字后回车搜索',
             style: AppTypography.body(),
             placeholderStyle: AppTypography.body(
                 color: AppColors.of(AppColors.tertiaryLabel)),
@@ -293,7 +311,7 @@ class _SearchScreenState extends State<SearchScreen> {
         child: Text(t, style: AppTypography.body().copyWith(fontSize: 14)),
       );
 
-  // —— 本地结果（Cupertino sliver refresh + inset grouped）——
+  // —— 本地结果 ——
   Widget _buildLocal() {
     return CustomScrollView(
       physics: const BouncingScrollPhysics(
@@ -328,8 +346,8 @@ class _SearchScreenState extends State<SearchScreen> {
         final tt = t as Map;
         final info = _stateInfo((tt['state'] ?? '').toString());
         final progress = ((tt['progress'] ?? 0.0) as num).toDouble();
-        final dotStyle = AppTypography.caption(
-            color: AppColors.of(AppColors.tertiaryLabel));
+        final dotStyle =
+            AppTypography.caption(color: AppColors.of(AppColors.tertiaryLabel));
         return CupertinoListTile.notched(
           leading: Icon(info.icon, color: info.color, size: 22),
           title: Text(
@@ -357,8 +375,8 @@ class _SearchScreenState extends State<SearchScreen> {
           ),
           trailing: const CupertinoListTileChevron(),
           onTap: () async {
-            await Get.to(() => TorrentDetailScreen(
-                torrent: Map<String, dynamic>.from(tt)));
+            await Get.to(
+                () => TorrentDetailScreen(torrent: Map<String, dynamic>.from(tt)));
             _loadLocal();
           },
         );
@@ -376,7 +394,7 @@ class _SearchScreenState extends State<SearchScreen> {
     }
     if (!_onlineSearched) {
       return _emptyHint(
-        '输入关键字后回车，跨站点搜索种子',
+        '输入关键字后回车，搜索 141PPV 种子',
         icon: CupertinoIcons.search,
       );
     }
@@ -386,15 +404,29 @@ class _SearchScreenState extends State<SearchScreen> {
     if (!_searching && _results.isEmpty) {
       return _emptyHint('没有找到结果，换个关键字试试');
     }
-    return CustomScrollView(
+    return ListView(
       physics: const BouncingScrollPhysics(
         parent: AlwaysScrollableScrollPhysics(),
       ),
-      slivers: [
-        if (_searching)
-          SliverToBoxAdapter(child: _buildSearchingBanner()),
-        SliverToBoxAdapter(child: _buildOnlineList()),
-        const SliverToBoxAdapter(child: SizedBox(height: 24)),
+      children: [
+        if (_searching) _buildSearchingBanner(),
+        _buildOnlineList(),
+        if (!_searching)
+          Padding(
+            padding: const EdgeInsets.only(top: 12, bottom: 24),
+            child: Center(
+              child: CupertinoButton(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                minimumSize: Size.zero,
+                onPressed: _loadMore,
+                child: const Text('加载更多',
+                    style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                        color: AppColors.accent)),
+              ),
+            ),
+          ),
       ],
     );
   }
@@ -420,8 +452,7 @@ class _SearchScreenState extends State<SearchScreen> {
     return CupertinoListSection.insetGrouped(
       backgroundColor: AppColors.of(AppColors.groupedBg),
       decoration: BoxDecoration(color: AppColors.of(AppColors.card)),
-      children:
-          _results.map((r) => _buildOnlineTile(r as Map)).toList(),
+      children: _results.map((r) => _buildOnlineTile(r)).toList(),
     );
   }
 
@@ -430,10 +461,9 @@ class _SearchScreenState extends State<SearchScreen> {
     final size = r['fileSize'] as num?;
     final seeders = ((r['nbSeeders'] ?? -1) as num).toInt();
     final leechers = ((r['nbLeechers'] ?? -1) as num).toInt();
-    final site = Uri.tryParse((r['siteUrl'] ?? '').toString())?.host ?? '';
 
-    final dotStyle = AppTypography.caption(
-        color: AppColors.of(AppColors.tertiaryLabel));
+    final dotStyle =
+        AppTypography.caption(color: AppColors.of(AppColors.tertiaryLabel));
     final spans = <InlineSpan>[];
     void addSep() {
       if (spans.isNotEmpty) {
@@ -448,26 +478,29 @@ class _SearchScreenState extends State<SearchScreen> {
         style: AppTypography.caption(),
       ));
     }
-    addSep();
-    spans.add(const WidgetSpan(
-      alignment: PlaceholderAlignment.middle,
-      child: Icon(CupertinoIcons.arrow_up,
-          size: 10, color: AppColors.success),
-    ));
-    spans.add(TextSpan(
-      text: ' ${seeders < 0 ? '?' : seeders}',
-      style: AppTypography.caption(color: AppColors.success),
-    ));
-    addSep();
-    spans.add(const WidgetSpan(
-      alignment: PlaceholderAlignment.middle,
-      child: Icon(CupertinoIcons.arrow_down,
-          size: 10, color: AppColors.warning),
-    ));
-    spans.add(TextSpan(
-      text: ' ${leechers < 0 ? '?' : leechers}',
-      style: AppTypography.caption(color: AppColors.warning),
-    ));
+    if (seeders >= 0) {
+      addSep();
+      spans.add(const WidgetSpan(
+        alignment: PlaceholderAlignment.middle,
+        child: Icon(CupertinoIcons.arrow_up, size: 10, color: AppColors.success),
+      ));
+      spans.add(TextSpan(
+        text: ' $seeders',
+        style: AppTypography.caption(color: AppColors.success),
+      ));
+    }
+    if (leechers >= 0) {
+      addSep();
+      spans.add(const WidgetSpan(
+        alignment: PlaceholderAlignment.middle,
+        child:
+            Icon(CupertinoIcons.arrow_down, size: 10, color: AppColors.warning),
+      ));
+      spans.add(TextSpan(
+        text: ' $leechers',
+        style: AppTypography.caption(color: AppColors.warning),
+      ));
+    }
 
     final subtitleWidgets = <Widget>[
       Text.rich(
@@ -475,19 +508,15 @@ class _SearchScreenState extends State<SearchScreen> {
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
       ),
+      const SizedBox(height: 2),
+      Text(
+        '141PPV  ·  ${Uri.tryParse((r['siteUrl'] ?? '').toString())?.pathSegments.lastOrNull ?? ''}',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: AppTypography.caption(
+            color: AppColors.of(AppColors.tertiaryLabel)),
+      ),
     ];
-    if (site.isNotEmpty) {
-      subtitleWidgets.addAll([
-        const SizedBox(height: 2),
-        Text(
-          site,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: AppTypography.caption(
-              color: AppColors.of(AppColors.tertiaryLabel)),
-        ),
-      ]);
-    }
 
     return CupertinoListTile(
       title: Text(
