@@ -32,6 +32,7 @@ class _SearchScreenState extends State<SearchScreen> {
   List<Map<String, dynamic>> _results = [];
   String? _onlineNotice;
   bool _onlineSearched = false;
+  int _lastPage = 1; // 已搜索到的最后一页
 
   @override
   void initState() {
@@ -82,9 +83,11 @@ class _SearchScreenState extends State<SearchScreen> {
       _onlineSearched = true;
       _searching = true;
       _results = [];
+      _lastPage = 1;
     });
 
-    final items = await TorrentSearchService.instance.search(pattern, pages: 3);
+    final items = await TorrentSearchService.instance.search(pattern,
+        pages: 10, startPage: _lastPage);
     if (!mounted) return;
 
     if (items.isEmpty) {
@@ -98,6 +101,7 @@ class _SearchScreenState extends State<SearchScreen> {
     setState(() {
       _searching = false;
       _results = items.map(_toResultMap).toList();
+      _lastPage = 10;
     });
   }
 
@@ -105,10 +109,12 @@ class _SearchScreenState extends State<SearchScreen> {
     if (_searching) return;
     setState(() => _searching = true);
 
-    final currentCount = _results.length;
+    // 从上次停止页继续向后翻 15 页（挖更早资源）
+    final start = _lastPage + 1;
     final items = await TorrentSearchService.instance.search(
       _queryCtrl.text.trim(),
-      pages: (currentCount ~/ 20).clamp(2, 10), // 每次多翻几页
+      pages: 15,
+      startPage: start,
     );
     if (!mounted) return;
 
@@ -119,7 +125,10 @@ class _SearchScreenState extends State<SearchScreen> {
       }
     }
 
-    setState(() => _searching = false);
+    setState(() {
+      _searching = false;
+      _lastPage = start + 15 - 1;
+    });
   }
 
   Map<String, dynamic> _toResultMap(ScrapedTorrent item) {
@@ -134,6 +143,10 @@ class _SearchScreenState extends State<SearchScreen> {
       'siteUrl': item.pageUrl,
       'siteName': '141PPV',
       'descrLink': item.pageUrl,
+      'thumbnail': item.thumbnail ?? '',
+      'sizeStr': item.size, // 原始大小字符串如 "5.3 GB"
+      'date': item.date,
+      'code': item.code,
     };
   }
 
@@ -419,7 +432,7 @@ class _SearchScreenState extends State<SearchScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 minimumSize: Size.zero,
                 onPressed: _loadMore,
-                child: const Text('加载更多',
+                child: const Text('搜索更早资源',
                     style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w500,
@@ -458,70 +471,63 @@ class _SearchScreenState extends State<SearchScreen> {
 
   Widget _buildOnlineTile(Map r) {
     final name = (r['fileName'] ?? '').toString();
-    final size = r['fileSize'] as num?;
-    final seeders = ((r['nbSeeders'] ?? -1) as num).toInt();
-    final leechers = ((r['nbLeechers'] ?? -1) as num).toInt();
+    final sizeStr = (r['sizeStr'] ?? '').toString();
+    final date = (r['date'] ?? '').toString();
+    final code = (r['code'] ?? '').toString();
+    final thumb = (r['thumbnail'] ?? '').toString();
 
-    final dotStyle =
-        AppTypography.caption(color: AppColors.of(AppColors.tertiaryLabel));
-    final spans = <InlineSpan>[];
-    void addSep() {
-      if (spans.isNotEmpty) {
-        spans.add(TextSpan(text: '  ·  ', style: dotStyle));
-      }
-    }
-
-    if (size != null) {
-      addSep();
-      spans.add(TextSpan(
-        text: _fmtSize(size),
-        style: AppTypography.caption(),
-      ));
-    }
-    if (seeders >= 0) {
-      addSep();
-      spans.add(const WidgetSpan(
-        alignment: PlaceholderAlignment.middle,
-        child: Icon(CupertinoIcons.arrow_up, size: 10, color: AppColors.success),
-      ));
-      spans.add(TextSpan(
-        text: ' $seeders',
-        style: AppTypography.caption(color: AppColors.success),
-      ));
-    }
-    if (leechers >= 0) {
-      addSep();
-      spans.add(const WidgetSpan(
-        alignment: PlaceholderAlignment.middle,
-        child:
-            Icon(CupertinoIcons.arrow_down, size: 10, color: AppColors.warning),
-      ));
-      spans.add(TextSpan(
-        text: ' $leechers',
-        style: AppTypography.caption(color: AppColors.warning),
-      ));
-    }
-
-    final subtitleWidgets = <Widget>[
-      Text.rich(
-        TextSpan(children: spans),
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      ),
-      const SizedBox(height: 2),
-      Text(
-        '141PPV  ·  ${Uri.tryParse((r['siteUrl'] ?? '').toString())?.pathSegments.lastOrNull ?? ''}',
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: AppTypography.caption(
-            color: AppColors.of(AppColors.tertiaryLabel)),
-      ),
-    ];
+    final metaParts = <String>[];
+    if (sizeStr.isNotEmpty) metaParts.add(sizeStr);
+    if (date.isNotEmpty) metaParts.add(date);
 
     return CupertinoListTile(
+      leading: thumb.isNotEmpty
+          ? ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: Image.network(
+                thumb,
+                width: 56,
+                height: 72,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => Container(
+                  width: 56,
+                  height: 72,
+                  decoration: BoxDecoration(
+                    color: AppColors.of(AppColors.separator),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: const Icon(CupertinoIcons.photo,
+                      size: 20, color: AppColors.placeholder),
+                ),
+                loadingBuilder: (_, child, progress) {
+                  if (progress == null) return child;
+                  return Container(
+                    width: 56,
+                    height: 72,
+                    decoration: BoxDecoration(
+                      color: AppColors.of(AppColors.separator),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: const Center(
+                      child: CupertinoActivityIndicator(radius: 6),
+                    ),
+                  );
+                },
+              ),
+            )
+          : Container(
+              width: 56,
+              height: 72,
+              decoration: BoxDecoration(
+                color: AppColors.of(AppColors.separator),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child:
+                  const Icon(CupertinoIcons.cloud_fill, size: 20, color: AppColors.placeholder),
+            ),
       title: Text(
-        name,
-        maxLines: 2,
+        code.isNotEmpty ? code : name,
+        maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: AppTypography.body().copyWith(
           fontSize: 15,
@@ -532,7 +538,24 @@ class _SearchScreenState extends State<SearchScreen> {
       subtitle: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
-        children: subtitleWidgets,
+        children: [
+          Text(
+            name,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: AppTypography.subtitle().copyWith(fontSize: 13),
+          ),
+          if (metaParts.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              '141PPV  ·  ${metaParts.join("  ·  ")}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppTypography.caption(
+                  color: AppColors.of(AppColors.tertiaryLabel)),
+            ),
+          ],
+        ],
       ),
       trailing: const Icon(
         CupertinoIcons.add_circled,

@@ -60,25 +60,32 @@ class TorrentSearchService {
     },
   ));
 
-  /// 搜索种子：从 /new 列表抓取 [pages] 页，按 [query] 过滤标题/代码。
+  /// 搜索种子：从 /new 列表并发抓取 [pages] 页，按 [query] 过滤标题/代码。
   ///
+  /// [startPage] 指定起始页（1 为最新），用于深层翻页。
   /// 返回 [ScrapedTorrent] 列表（已去重），空列表表示无结果或网络异常。
-  Future<List<ScrapedTorrent>> search(String query,
-      {int pages = 3}) async {
+  Future<List<ScrapedTorrent>> search(
+    String query, {
+    int pages = 10,
+    int startPage = 1,
+  }) async {
     final q = query.trim().toLowerCase();
     final results = <ScrapedTorrent>[];
     final seen = <String>{};
 
-    for (var page = 1; page <= pages; page++) {
-      final url = page == 1 ? '$_base/new' : '$_base/new?page=$page';
-      try {
-        final resp = await _dio.get(url);
-        if (resp.data is! String) continue;
-        final items = _parseList(resp.data as String);
+    // 并发抓取：每批 5 页，避免压垮对方服务器
+    const batchSize = 5;
+    for (var batch = startPage; batch < startPage + pages; batch += batchSize) {
+      final end = (batch + batchSize - 1).clamp(batch, startPage + pages - 1);
+      final futures = <Future<List<ScrapedTorrent>?>>[];
+      for (var p = batch; p <= end; p++) {
+        futures.add(_fetchPage(p));
+      }
+      final batchResults = await Future.wait(futures);
+      for (final items in batchResults) {
+        if (items == null) continue;
         for (final item in items) {
-          final key = item.magnet.isNotEmpty
-              ? item.magnet
-              : item.code;
+          final key = item.magnet.isNotEmpty ? item.magnet : item.code;
           if (seen.contains(key)) continue;
           seen.add(key);
           if (q.isEmpty ||
@@ -87,13 +94,23 @@ class TorrentSearchService {
             results.add(item);
           }
         }
-      } on DioException catch (e) {
-        debugPrint('141ppv page $page fetch error: $e');
-        // 单页失败不阻断后续页
-        continue;
       }
     }
     return results;
+  }
+
+  /// 抓取单页，失败返回 null。
+  Future<List<ScrapedTorrent>?> _fetchPage(int page) async {
+    final url = page == 1 ? '$_base/new' : '$_base/new?page=$page';
+    try {
+      final resp = await _dio.get(url);
+      if (resp.data is String) {
+        return _parseList(resp.data as String);
+      }
+    } on DioException catch (e) {
+      debugPrint('141ppv page $page fetch error: $e');
+    }
+    return null;
   }
 
   /// 解析列表页 HTML，提取每个种子条目。
