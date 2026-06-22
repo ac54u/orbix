@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 
 import '../services/qbit_api.dart';
@@ -11,7 +13,18 @@ import '../widgets/skeleton.dart';
 import '../widgets/toast.dart';
 import 'torrent_detail_screen.dart';
 
-/// 搜索页：本地任务搜索 + 141ppv.com 联网爬虫（顶部分段切换）。
+enum OnlineSearchState { idle, searching, success, empty, error }
+
+class Debouncer {
+  final int milliseconds;
+  Timer? _timer;
+  Debouncer({required this.milliseconds});
+  void run(VoidCallback action) {
+    if (_timer?.isActive ?? false) _timer!.cancel();
+    _timer = Timer(Duration(milliseconds: milliseconds), action);
+  }
+}
+
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
 
@@ -21,18 +34,16 @@ class SearchScreen extends StatefulWidget {
 
 class _SearchScreenState extends State<SearchScreen> {
   final _queryCtrl = TextEditingController();
-  int _mode = 0; // 0=本地 1=联网
+  final _debouncer = Debouncer(milliseconds: 600);
+  int _mode = 0;
 
-  // —— 本地 ——
   List<dynamic> _allTorrents = [];
   bool _localLoaded = false;
 
-  // —— 联网 ——
-  bool _searching = false;
+  OnlineSearchState _onlineState = OnlineSearchState.idle;
   List<Map<String, dynamic>> _results = [];
-  String? _onlineNotice;
-  bool _onlineSearched = false;
-  int _lastPage = 1; // 已搜索到的最后一页
+  int _lastPage = 1;
+  bool _isLoadingMore = false;
 
   @override
   void initState() {
@@ -59,7 +70,6 @@ class _SearchScreenState extends State<SearchScreen> {
     }
   }
 
-  // —— 本地筛选 ——
   List<dynamic> get _localResults {
     final q = _queryCtrl.text.trim().toLowerCase();
     final list = _allTorrents.where((t) {
@@ -72,136 +82,84 @@ class _SearchScreenState extends State<SearchScreen> {
     return list;
   }
 
-  // —— 联网搜索（141ppv.com 爬虫）——
-  Future<void> _runOnlineSearch() async {
-    final pattern = _queryCtrl.text.trim();
-    if (pattern.isEmpty) return;
-    FocusScope.of(context).unfocus();
+  Future<void> _runOnlineSearch(String pattern) async {
+    if (pattern.trim().isEmpty) {
+      setState(() => _onlineState = OnlineSearchState.idle);
+      return;
+    }
 
     setState(() {
-      _onlineNotice = null;
-      _onlineSearched = true;
-      _searching = true;
+      _onlineState = OnlineSearchState.searching;
       _results = [];
       _lastPage = 1;
     });
 
-    final items = await TorrentSearchService.instance.search(pattern,
-        pages: 10, startPage: _lastPage);
-    if (!mounted) return;
+    try {
+      final items = await TorrentSearchService.instance.search(pattern.trim(), pages: 10, startPage: 1);
+      if (!mounted) return;
 
-    if (items.isEmpty) {
+      if (items.isEmpty) {
+        setState(() => _onlineState = OnlineSearchState.empty);
+        return;
+      }
+
       setState(() {
-        _searching = false;
-        _onlineNotice = '没有找到结果，换个关键字试试';
+        _results = items.map(_toResultMap).toList();
+        _lastPage = 10;
+        _onlineState = OnlineSearchState.success;
       });
-      return;
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _onlineState = OnlineSearchState.error);
     }
-
-    setState(() {
-      _searching = false;
-      _results = items.map(_toResultMap).toList();
-      _lastPage = 10;
-    });
   }
 
   Future<void> _loadMore() async {
-    if (_searching) return;
-    setState(() => _searching = true);
+    if (_isLoadingMore) return;
+    setState(() => _isLoadingMore = true);
 
-    // 从上次停止页继续向后翻 15 页（挖更早资源）
     final start = _lastPage + 1;
-    final items = await TorrentSearchService.instance.search(
-      _queryCtrl.text.trim(),
-      pages: 15,
-      startPage: start,
-    );
-    if (!mounted) return;
+    try {
+      final items = await TorrentSearchService.instance.search(
+        _queryCtrl.text.trim(),
+        pages: 15,
+        startPage: start,
+      );
+      if (!mounted) return;
 
-    final seen = _results.map((r) => r['fileUrl'] as String).toSet();
-    for (final item in items) {
-      if (!seen.contains(item.magnet)) {
-        _results.add(_toResultMap(item));
+      final seen = _results.map((r) => r['fileUrl'] as String).toSet();
+      for (final item in items) {
+        if (!seen.contains(item.magnet)) {
+          _results.add(_toResultMap(item));
+        }
       }
+      setState(() {
+        _isLoadingMore = false;
+        _lastPage = start + 15 - 1;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _isLoadingMore = false);
     }
-
-    setState(() {
-      _searching = false;
-      _lastPage = start + 15 - 1;
-    });
   }
 
   Map<String, dynamic> _toResultMap(ScrapedTorrent item) {
     return {
-      'fileName': item.title.isNotEmpty && item.title != item.code
-          ? '[${item.code}] ${item.title}'
-          : item.code,
+      'fileName': item.title,
       'fileUrl': item.magnet,
-      'fileSize': _parseSizeBytes(item.size),
-      'nbSeeders': -1,
-      'nbLeechers': -1,
-      'siteUrl': item.pageUrl,
-      'siteName': '141PPV',
-      'descrLink': item.pageUrl,
-      'thumbnail': item.thumbnail ?? '',
-      'sizeStr': item.size, // 原始大小字符串如 "5.3 GB"
-      'date': item.date,
       'code': item.code,
+      'thumbnail': item.thumbnail ?? '',
+      'sizeStr': item.size,
+      'date': item.date,
     };
-  }
-
-  /// "5.3 GB" → bytes
-  int? _parseSizeBytes(String size) {
-    if (size.isEmpty) return null;
-    final m = RegExp(r'([\d.]+)\s*(TB|GB|MB|KB|B)',
-            caseSensitive: false)
-        .firstMatch(size);
-    if (m == null) return null;
-    final num = double.tryParse(m.group(1)!) ?? 0;
-    final unit = m.group(2)!.toUpperCase();
-    switch (unit) {
-      case 'TB':
-        return (num * 1099511627776).round();
-      case 'GB':
-        return (num * 1073741824).round();
-      case 'MB':
-        return (num * 1048576).round();
-      case 'KB':
-        return (num * 1024).round();
-      default:
-        return num.round();
-    }
   }
 
   Future<void> _addResult(Map result) async {
     final url = (result['fileUrl'] ?? '').toString();
-    final name = (result['fileName'] ?? '').toString();
     if (url.isEmpty) {
       _toast('该结果没有可用的下载链接', ok: false);
       return;
     }
-    final confirm = await showCupertinoDialog<bool>(
-      context: context,
-      builder: (ctx) => CupertinoAlertDialog(
-        title: const Text('添加任务'),
-        content: Padding(
-          padding: const EdgeInsets.only(top: 8),
-          child: Text(name, maxLines: 4, overflow: TextOverflow.ellipsis),
-        ),
-        actions: [
-          CupertinoDialogAction(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('取消'),
-          ),
-          CupertinoDialogAction(
-            isDefaultAction: true,
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('添加'),
-          ),
-        ],
-      ),
-    );
-    if (confirm != true) return;
+    HapticFeedback.mediumImpact();
     final err = await QBitApi().addMagnet(url);
     if (!mounted) return;
     _toast(err ?? '已添加到下载队列', ok: err == null);
@@ -209,63 +167,6 @@ class _SearchScreenState extends State<SearchScreen> {
 
   void _toast(String msg, {required bool ok}) {
     Toast.show(context, msg, type: ok ? ToastType.success : ToastType.error);
-  }
-
-  // —— 格式化 ——
-  String _fmtSize(num? bytes) {
-    final b = (bytes ?? 0).toDouble();
-    if (b < 0) return '未知';
-    if (b == 0) return '0 B';
-    if (b < 1024) return '${b.toStringAsFixed(0)} B';
-    if (b < 1024 * 1024) return '${(b / 1024).toStringAsFixed(2)} KB';
-    if (b < 1024 * 1024 * 1024) {
-      return '${(b / 1048576).toStringAsFixed(2)} MB';
-    }
-    return '${(b / 1073741824).toStringAsFixed(2)} GB';
-  }
-
-  // 状态 → (color, icon)
-  ({Color color, IconData icon}) _stateInfo(String state) {
-    if (['downloading', 'metaDL', 'forcedDL', 'stalledDL'].contains(state)) {
-      return (
-        color: AppColors.accent,
-        icon: CupertinoIcons.arrow_down_circle_fill,
-      );
-    }
-    if (['uploading', 'forcedUP', 'stalledUP'].contains(state)) {
-      return (
-        color: AppColors.success,
-        icon: CupertinoIcons.arrow_up_circle_fill,
-      );
-    }
-    if (state.startsWith('paused') || state.startsWith('stopped')) {
-      return (
-        color: AppColors.of(AppColors.secondaryLabel),
-        icon: CupertinoIcons.pause_circle_fill,
-      );
-    }
-    if (state.startsWith('checking')) {
-      return (
-        color: AppColors.warning,
-        icon: CupertinoIcons.arrow_2_circlepath_circle_fill,
-      );
-    }
-    if (state == 'missingFiles') {
-      return (
-        color: AppColors.danger,
-        icon: CupertinoIcons.exclamationmark_triangle_fill,
-      );
-    }
-    if (state == 'error') {
-      return (
-        color: AppColors.danger,
-        icon: CupertinoIcons.exclamationmark_circle_fill,
-      );
-    }
-    return (
-      color: AppColors.of(AppColors.tertiaryLabel),
-      icon: CupertinoIcons.circle,
-    );
   }
 
   @override
@@ -276,7 +177,7 @@ class _SearchScreenState extends State<SearchScreen> {
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
-          child: Text('搜索', style: AppTypography.largeTitle()),
+          child: Text('发现', style: AppTypography.largeTitle()),
         ),
         const SizedBox(height: 14),
         Padding(
@@ -285,7 +186,7 @@ class _SearchScreenState extends State<SearchScreen> {
             groupValue: _mode,
             children: {
               0: _segLabel('本地任务'),
-              1: _segLabel('联网搜种'),
+              1: _segLabel('141PPV 搜种'),
             },
             onValueChanged: (v) {
               if (v == null) return;
@@ -299,17 +200,16 @@ class _SearchScreenState extends State<SearchScreen> {
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: CupertinoSearchTextField(
             controller: _queryCtrl,
-            placeholder:
-                _mode == 0 ? '搜索我的任务' : '输入关键字后回车搜索',
+            placeholder: _mode == 0 ? '搜索我的任务' : '输入番号或名称，自动搜索',
             style: AppTypography.body(),
-            placeholderStyle: AppTypography.body(
-                color: AppColors.of(AppColors.tertiaryLabel)),
+            placeholderStyle: AppTypography.body(color: AppColors.of(AppColors.tertiaryLabel)),
             backgroundColor: AppColors.of(AppColors.card),
-            onChanged: (_) {
-              if (_mode == 0) setState(() {});
-            },
-            onSubmitted: (_) {
-              if (_mode == 1) _runOnlineSearch();
+            onChanged: (text) {
+              if (_mode == 0) {
+                setState(() {});
+              } else {
+                _debouncer.run(() => _runOnlineSearch(text));
+              }
             },
           ),
         ),
@@ -324,7 +224,6 @@ class _SearchScreenState extends State<SearchScreen> {
         child: Text(t, style: AppTypography.body().copyWith(fontSize: 14)),
       );
 
-  // —— 本地结果 ——
   Widget _buildLocal() {
     return CustomScrollView(
       physics: const BouncingScrollPhysics(
@@ -397,46 +296,25 @@ class _SearchScreenState extends State<SearchScreen> {
     );
   }
 
-  // —— 联网结果 ——
   Widget _buildOnline() {
-    if (_onlineNotice != null) {
-      return _emptyHint(
-        _onlineNotice!,
-        icon: CupertinoIcons.exclamationmark_circle,
-      );
-    }
-    if (!_onlineSearched) {
-      return _emptyHint(
-        '输入关键字后回车，搜索 141PPV 种子',
-        icon: CupertinoIcons.search,
-      );
-    }
-    if (_searching && _results.isEmpty) {
-      return _buildOnlineSkeleton();
-    }
-    if (!_searching && _results.isEmpty) {
-      return _emptyHint('没有找到结果，换个关键字试试');
-    }
-    return ListView(
-      physics: const BouncingScrollPhysics(
-        parent: AlwaysScrollableScrollPhysics(),
-      ),
-      children: [
-        if (_searching) _buildSearchingBanner(),
-        _buildOnlineList(),
-        if (!_searching)
-          Padding(
-            padding: const EdgeInsets.only(top: 12, bottom: 24),
-            child: Center(
-              child: CupertinoButton(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                minimumSize: Size.zero,
-                onPressed: _loadMore,
-                child: const Text('搜索更早资源',
-                    style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                        color: AppColors.accent)),
+    return CustomScrollView(
+      physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+      slivers: [
+        _buildOnlineContentSliver(),
+        if (_onlineState == OnlineSearchState.success)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 24),
+              child: Center(
+                child: _isLoadingMore
+                    ? const CupertinoActivityIndicator()
+                    : CupertinoButton(
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                        color: AppColors.of(AppColors.card),
+                        borderRadius: BorderRadius.circular(20),
+                        onPressed: _loadMore,
+                        child: const Text('挖掘更早资源', style: TextStyle(fontSize: 13, color: AppColors.accent)),
+                      ),
               ),
             ),
           ),
@@ -444,129 +322,170 @@ class _SearchScreenState extends State<SearchScreen> {
     );
   }
 
-  Widget _buildSearchingBanner() {
-    return Padding(
-      padding: const EdgeInsets.only(top: 4, bottom: 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const CupertinoActivityIndicator(radius: 8),
-          const SizedBox(width: 8),
-          Text(
-            '搜索中…已找到 ${_results.length} 条',
-            style: AppTypography.caption(),
+  Widget _buildOnlineContentSliver() {
+    switch (_onlineState) {
+      case OnlineSearchState.idle:
+        return SliverFillRemaining(child: _emptyHint('输入关键字自动匹配 141PPV', icon: CupertinoIcons.search));
+      case OnlineSearchState.searching:
+        return _buildGridSkeleton();
+      case OnlineSearchState.empty:
+        return SliverFillRemaining(child: _emptyHint('未找到相关番号或结果'));
+      case OnlineSearchState.error:
+        return SliverFillRemaining(child: _emptyHint('网络请求失败，请检查连通性', icon: CupertinoIcons.wifi_exclamationmark));
+      case OnlineSearchState.success:
+        return SliverPadding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          sliver: SliverGrid(
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              mainAxisSpacing: 12,
+              crossAxisSpacing: 12,
+              childAspectRatio: 0.68,
+            ),
+            delegate: SliverChildBuilderDelegate(
+              (context, index) => _buildGridCard(_results[index]),
+              childCount: _results.length,
+            ),
           ),
-        ],
-      ),
-    );
+        );
+    }
   }
 
-  Widget _buildOnlineList() {
-    return CupertinoListSection.insetGrouped(
-      backgroundColor: AppColors.of(AppColors.groupedBg),
-      decoration: BoxDecoration(color: AppColors.of(AppColors.card)),
-      children: _results.map((r) => _buildOnlineTile(r)).toList(),
-    );
-  }
-
-  Widget _buildOnlineTile(Map r) {
-    final name = (r['fileName'] ?? '').toString();
-    final sizeStr = (r['sizeStr'] ?? '').toString();
-    final date = (r['date'] ?? '').toString();
+  Widget _buildGridCard(Map r) {
     final code = (r['code'] ?? '').toString();
+    final sizeStr = (r['sizeStr'] ?? '').toString();
     final thumb = (r['thumbnail'] ?? '').toString();
 
-    final metaParts = <String>[];
-    if (sizeStr.isNotEmpty) metaParts.add(sizeStr);
-    if (date.isNotEmpty) metaParts.add(date);
-
-    return CupertinoListTile(
-      leading: thumb.isNotEmpty
-          ? ClipRRect(
-              borderRadius: BorderRadius.circular(6),
-              child: Image.network(
-                thumb,
-                width: 56,
-                height: 72,
-                fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => Container(
-                  width: 56,
-                  height: 72,
-                  decoration: BoxDecoration(
-                    color: AppColors.of(AppColors.separator),
-                    borderRadius: BorderRadius.circular(6),
+    return CupertinoContextMenu(
+      actions: [
+        CupertinoContextMenuAction(
+          onPressed: () {
+            Navigator.pop(context);
+            _addResult(r);
+          },
+          trailingIcon: CupertinoIcons.arrow_down_circle,
+          child: const Text('添加到队列'),
+        ),
+        CupertinoContextMenuAction(
+          onPressed: () {
+            Clipboard.setData(ClipboardData(text: r['fileUrl']));
+            Navigator.pop(context);
+            _toast('磁力链接已复制', ok: true);
+          },
+          trailingIcon: CupertinoIcons.doc_on_doc,
+          child: const Text('复制磁力'),
+        ),
+      ],
+      child: GestureDetector(
+        onTap: () => _showFullImage(thumb),
+        child: Container(
+          decoration: BoxDecoration(
+            color: AppColors.of(AppColors.card),
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.05),
+                blurRadius: 8,
+                offset: const Offset(0, 4),
+              )
+            ],
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              if (thumb.isNotEmpty)
+                Image.network(
+                  thumb,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => _fallbackCover(),
+                )
+              else
+                _fallbackCover(),
+              Positioned(
+                bottom: 0, left: 0, right: 0,
+                child: ClipRect(
+                  child: BackdropFilter(
+                    filter: ColorFilter.mode(Colors.black.withValues(alpha: 0.6), BlendMode.srcOver),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            code.isNotEmpty ? code : '未知',
+                            style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w700),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            sizeStr,
+                            style: TextStyle(color: Colors.white.withValues(alpha: 0.8), fontSize: 11),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
-                  child: const Icon(CupertinoIcons.photo,
-                      size: 20, color: AppColors.placeholder),
                 ),
-                loadingBuilder: (_, child, progress) {
-                  if (progress == null) return child;
-                  return Container(
-                    width: 56,
-                    height: 72,
-                    decoration: BoxDecoration(
-                      color: AppColors.of(AppColors.separator),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: const Center(
-                      child: CupertinoActivityIndicator(radius: 6),
-                    ),
-                  );
-                },
               ),
-            )
-          : Container(
-              width: 56,
-              height: 72,
-              decoration: BoxDecoration(
-                color: AppColors.of(AppColors.separator),
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child:
-                  const Icon(CupertinoIcons.cloud_fill, size: 20, color: AppColors.placeholder),
-            ),
-      title: Text(
-        code.isNotEmpty ? code : name,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: AppTypography.body().copyWith(
-          fontSize: 15,
-          fontWeight: FontWeight.w600,
-          height: 1.25,
+            ],
+          ),
         ),
       ),
-      subtitle: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            name,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: AppTypography.subtitle().copyWith(fontSize: 13),
-          ),
-          if (metaParts.isNotEmpty) ...[
-            const SizedBox(height: 4),
-            Text(
-              '141PPV  ·  ${metaParts.join("  ·  ")}',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: AppTypography.caption(
-                  color: AppColors.of(AppColors.tertiaryLabel)),
-            ),
-          ],
-        ],
-      ),
-      trailing: const Icon(
-        CupertinoIcons.add_circled,
-        size: 22,
-        color: AppColors.accent,
-      ),
-      onTap: () => _addResult(r),
     );
   }
 
-  // —— 加载态：骨架屏 ——
+  void _showFullImage(String url) {
+    if (url.isEmpty) return;
+    Navigator.push(context, CupertinoPageRoute(
+      builder: (_) => GestureDetector(
+        onTap: () => Navigator.pop(context),
+        child: Container(
+          color: Colors.black,
+          child: Center(
+            child: InteractiveViewer(
+              child: Image.network(url, fit: BoxFit.contain,
+                errorBuilder: (_, __, ___) => const Icon(CupertinoIcons.photo, color: Colors.white54, size: 64),
+                loadingBuilder: (_, child, progress) {
+                  if (progress == null) return child;
+                  return const CupertinoActivityIndicator();
+                },
+              ),
+            ),
+          ),
+        ),
+      ),
+      fullscreenDialog: true,
+    ));
+  }
+
+  Widget _fallbackCover() => Container(
+        color: AppColors.of(AppColors.separator),
+        child: const Center(child: Icon(CupertinoIcons.film, color: AppColors.placeholder)),
+      );
+
+  Widget _buildGridSkeleton() {
+    return SliverPadding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      sliver: SliverGrid(
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2, mainAxisSpacing: 12, crossAxisSpacing: 12, childAspectRatio: 0.68,
+        ),
+        delegate: SliverChildBuilderDelegate(
+          (context, index) => Container(
+            decoration: BoxDecoration(
+              color: AppColors.of(AppColors.card),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const SkeletonBar(width: double.infinity, height: double.infinity),
+          ),
+          childCount: 6,
+        ),
+      ),
+    );
+  }
+
   Widget _buildLocalSkeleton() {
     return CupertinoListSection.insetGrouped(
       backgroundColor: AppColors.of(AppColors.groupedBg),
@@ -587,60 +506,72 @@ class _SearchScreenState extends State<SearchScreen> {
     );
   }
 
-  Widget _buildOnlineSkeleton() {
-    return ListView(
-      physics: const BouncingScrollPhysics(
-        parent: AlwaysScrollableScrollPhysics(),
-      ),
-      children: [
-        Padding(
-          padding: const EdgeInsets.only(top: 4, bottom: 4),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const CupertinoActivityIndicator(radius: 8),
-              const SizedBox(width: 8),
-              Text('搜索中…', style: AppTypography.caption()),
-            ],
-          ),
-        ),
-        CupertinoListSection.insetGrouped(
-          backgroundColor: AppColors.of(AppColors.groupedBg),
-          decoration: BoxDecoration(color: AppColors.of(AppColors.card)),
-          children: List.generate(
-            5,
-            (_) => const CupertinoListTile(
-              title: SkeletonBar(width: 220, height: 14),
-              subtitle: SkeletonBar(width: 140, height: 12),
-              trailing: SkeletonBar(
-                width: 22,
-                height: 22,
-                borderRadius: BorderRadius.all(Radius.circular(11)),
-              ),
-            ),
-          ),
-        ),
-      ],
+  // —— 格式化 ——
+  String _fmtSize(num? bytes) {
+    final b = (bytes ?? 0).toDouble();
+    if (b < 0) return '未知';
+    if (b == 0) return '0 B';
+    if (b < 1024) return '${b.toStringAsFixed(0)} B';
+    if (b < 1024 * 1024) return '${(b / 1024).toStringAsFixed(2)} KB';
+    if (b < 1024 * 1024 * 1024) {
+      return '${(b / 1048576).toStringAsFixed(2)} MB';
+    }
+    return '${(b / 1073741824).toStringAsFixed(2)} GB';
+  }
+
+  // 状态 → (color, icon)
+  ({Color color, IconData icon}) _stateInfo(String state) {
+    if (['downloading', 'metaDL', 'forcedDL', 'stalledDL'].contains(state)) {
+      return (
+        color: AppColors.accent,
+        icon: CupertinoIcons.arrow_down_circle_fill,
+      );
+    }
+    if (['uploading', 'forcedUP', 'stalledUP'].contains(state)) {
+      return (
+        color: AppColors.success,
+        icon: CupertinoIcons.arrow_up_circle_fill,
+      );
+    }
+    if (state.startsWith('paused') || state.startsWith('stopped')) {
+      return (
+        color: AppColors.of(AppColors.secondaryLabel),
+        icon: CupertinoIcons.pause_circle_fill,
+      );
+    }
+    if (state.startsWith('checking')) {
+      return (
+        color: AppColors.warning,
+        icon: CupertinoIcons.arrow_2_circlepath_circle_fill,
+      );
+    }
+    if (state == 'missingFiles') {
+      return (
+        color: AppColors.danger,
+        icon: CupertinoIcons.exclamationmark_triangle_fill,
+      );
+    }
+    if (state == 'error') {
+      return (
+        color: AppColors.danger,
+        icon: CupertinoIcons.exclamationmark_circle_fill,
+      );
+    }
+    return (
+      color: AppColors.of(AppColors.tertiaryLabel),
+      icon: CupertinoIcons.circle,
     );
   }
 
   Widget _emptyHint(String text, {IconData icon = CupertinoIcons.tray}) {
     return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 40),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 40, color: AppColors.of(AppColors.placeholder)),
-            const SizedBox(height: 14),
-            Text(
-              text,
-              textAlign: TextAlign.center,
-              style: AppTypography.subtitle(
-                  color: AppColors.of(AppColors.tertiaryLabel)),
-            ),
-          ],
-        ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 48, color: AppColors.of(AppColors.placeholder)),
+          const SizedBox(height: 16),
+          Text(text, style: AppTypography.subtitle(color: AppColors.of(AppColors.tertiaryLabel))),
+        ],
       ),
     );
   }
