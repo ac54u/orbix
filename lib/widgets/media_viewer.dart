@@ -1,5 +1,3 @@
-import 'dart:math';
-
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
@@ -37,32 +35,27 @@ class _MediaViewerState extends State<MediaViewer>
   // ── 退出拖拽 ──
   double _dismissProgress = 0;
   Offset _dragOrigin = Offset.zero;
+  Offset _dismissOffset = Offset.zero;
   bool _isDragging = false;
 
   // ── Overlay 显示/隐藏 ──
   bool _overlayVisible = true;
 
-  // ── 弹性回弹动画 ──
-  late AnimationController _springCtrl;
-  Animation<Offset>? _springAnim;
-  double _springScale = 1;
+  // ── 退出动画 ──
+  late AnimationController _dismissCtrl;
 
   @override
   void initState() {
     super.initState();
     _currentIndex = widget.initialIndex;
     _pageCtrl = PageController(initialPage: _currentIndex);
-    _springCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 350));
-    _springCtrl.addListener(() {
-      if (_springAnim != null) {
-        final val = _springAnim!.value;
-        setState(() {
-          _dismissProgress = val.distance / 300;
-          _springScale = max(0.6, 1 - val.distance / 500);
-        });
-      }
+    _dismissCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 250));
+    _dismissCtrl.addListener(() {
+      setState(() {
+        _dismissProgress = _dismissCtrl.value;
+      });
     });
-    _springCtrl.addStatusListener((status) {
+    _dismissCtrl.addStatusListener((status) {
       if (status == AnimationStatus.completed) {
         Navigator.of(context).pop();
       }
@@ -72,11 +65,10 @@ class _MediaViewerState extends State<MediaViewer>
   @override
   void dispose() {
     _pageCtrl.dispose();
-    _springCtrl.dispose();
+    _dismissCtrl.dispose();
     super.dispose();
   }
 
-  // ── 导航 ──
   void _goNext() {
     if (_currentIndex < widget.imageUrls.length - 1) {
       _pageCtrl.animateToPage(_currentIndex + 1,
@@ -93,19 +85,18 @@ class _MediaViewerState extends State<MediaViewer>
     }
   }
 
-  // ── 启动退出拖拽 ──
   void _startDismiss(DragStartDetails d) {
     _isDragging = true;
     _dragOrigin = d.globalPosition;
-    _springCtrl.reset();
+    _dismissCtrl.reset();
   }
 
   void _updateDismiss(DragUpdateDetails d) {
     if (!_isDragging) return;
-    final dy = d.globalPosition.dy - _dragOrigin.dy;
+    final offset = d.globalPosition - _dragOrigin;
     setState(() {
-      _dismissProgress = (dy.abs() / 300).clamp(0.0, 1.0);
-      _springScale = max(0.6, 1 - dy.abs() / 500);
+      _dismissOffset = offset;
+      _dismissProgress = (offset.distance / 300).clamp(0.0, 1.0);
     });
   }
 
@@ -116,73 +107,67 @@ class _MediaViewerState extends State<MediaViewer>
   void _endDismiss(DragEndDetails d) {
     if (!_isDragging) return;
     _isDragging = false;
-    // 速度 > 800 或 拖拽距离 > 120 → pop
     if (d.primaryVelocity != null && d.primaryVelocity!.abs() > 800 ||
         _dismissProgress > 0.4) {
-      _springCtrl.forward();
+      _dismissCtrl.forward();
     } else {
-      // 回弹
-      _springCtrl.reset();
+      _dismissCtrl.reverse();
       setState(() {
-        _dismissProgress = 0;
-        _springScale = 1;
+        _dismissOffset = Offset.zero;
       });
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    // 使用 Listener 观察原生指针事件，不参与手势竞技场
+    final dismissProgress = _dismissCtrl.isAnimating
+        ? _dismissCtrl.value
+        : _dismissProgress;
+    final scale = 1 - dismissProgress * 0.25;
+
     return Listener(
       onPointerDown: (e) {
-        // 记录触摸起始位置用于判断方向
         _dragOrigin = e.position;
       },
       child: GestureDetector(
-        // 垂直拖拽 → 退出
         onVerticalDragStart: _startDismiss,
         onVerticalDragUpdate: _updateDismiss,
         onVerticalDragEnd: _endDismiss,
-        child: AnimatedBuilder(
-          animation: _springCtrl,
-          builder: (context, _) {
-            return Stack(
-              fit: StackFit.expand,
-              children: [
-                Container(
-                  color: Colors.black.withValues(
-                      alpha: (1 - _dismissProgress * 0.6).clamp(0.0, 1.0)),
-                  child: Opacity(
-                    opacity: (1 - _dismissProgress * 1.2).clamp(0.0, 1.0),
-                    child: Transform.scale(
-                      scale: _springScale,
-                      child: PageView.builder(
-                        physics: const NeverScrollableScrollPhysics(),
-                        controller: _pageCtrl,
-                        itemCount: widget.imageUrls.length,
-                        onPageChanged: (i) {
-                          setState(() => _currentIndex = i);
-                        },
-                        itemBuilder: (ctx, i) {
-                          return _ImagePage(
-                            url: widget.imageUrls[i],
-                            heroTag: widget.heroTagBuilder(i),
-                            isCurrentPage: i == _currentIndex,
-                            onZoomChanged: (_) {},
-                            onSwipeLeft: _goNext,
-                            onSwipeRight: _goPrev,
-                            onToggleOverlay: _toggleOverlay,
-                          );
-                        },
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            Container(
+              color: Colors.black.withValues(alpha: (1 - dismissProgress * 0.6).clamp(0.0, 1.0)),
+              child: Opacity(
+                opacity: (1 - dismissProgress * 1.2).clamp(0.0, 1.0),
+                child: Transform.translate(
+                  offset: _dismissCtrl.isAnimating
+                      ? Offset(0, _dismissCtrl.value * (_dismissOffset.dy.sign * 300))
+                      : _dismissOffset,
+                  child: Transform.scale(
+                    scale: scale,
+                    child: PageView.builder(
+                      physics: const NeverScrollableScrollPhysics(),
+                      controller: _pageCtrl,
+                      itemCount: widget.imageUrls.length,
+                      onPageChanged: (i) => setState(() => _currentIndex = i),
+                      itemBuilder: (ctx, i) => _ImagePage(
+                        url: widget.imageUrls[i],
+                        heroTag: widget.heroTagBuilder(i),
+                        isCurrentPage: i == _currentIndex,
+                        onZoomChanged: (_) {},
+                        onSwipeLeft: _goNext,
+                        onSwipeRight: _goPrev,
+                        onToggleOverlay: _toggleOverlay,
                       ),
                     ),
                   ),
                 ),
-                if (widget.overlayBuilder != null && _overlayVisible)
-                  widget.overlayBuilder!(_currentIndex),
-              ],
-            );
-          },
+              ),
+            ),
+            if (widget.overlayBuilder != null && _overlayVisible)
+              widget.overlayBuilder!(_currentIndex),
+          ],
         ),
       ),
     );
