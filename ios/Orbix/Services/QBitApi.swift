@@ -6,13 +6,7 @@ actor QBitApi {
 
     // MARK: - State
     private var activeServer: ServerConfig?
-    private var sessionCookie: String?
-    private let session: URLSession = {
-        let config = URLSessionConfiguration.ephemeral
-        config.httpCookieAcceptPolicy = .never
-        config.httpShouldSetCookies = false
-        return URLSession(configuration: config)
-    }()
+    private let session = URLSession(configuration: .ephemeral)
     private let decoder = JSONDecoder()
 
     // MARK: - Server Management
@@ -106,7 +100,6 @@ actor QBitApi {
     }
 
     private func login(server: ServerConfig) async -> ConnectResult {
-        sessionCookie = nil
         guard let url = URL(string: "\(server.url)/api/v2/auth/login") else {
             return ConnectResult(status: .unknown, message: "Invalid URL")
         }
@@ -128,12 +121,6 @@ actor QBitApi {
             }
 
             if httpResp.statusCode == 200 {
-                if let setCookie = httpResp.value(forHTTPHeaderField: "Set-Cookie"),
-                   let sid = setCookie.split(separator: ";").first {
-                    sessionCookie = String(sid)
-                } else {
-                    sessionCookie = nil
-                }
                 return .ok
             } else if httpResp.statusCode == 403 {
                 return .authFailed
@@ -150,7 +137,6 @@ actor QBitApi {
         guard let url = apiUrl(path) else { throw ApiError.invalidURL }
 
         var req = URLRequest(url: url)
-        req.setValue(sessionCookie, forHTTPHeaderField: "Cookie")
         req.timeoutInterval = 3
 
         let (data, response) = try await session.data(for: req)
@@ -162,7 +148,6 @@ actor QBitApi {
         guard let url = apiUrl(path) else { throw ApiError.invalidURL }
 
         var req = URLRequest(url: url)
-        req.setValue(sessionCookie, forHTTPHeaderField: "Cookie")
         req.timeoutInterval = 3
 
         let (data, response) = try await session.data(for: req)
@@ -176,7 +161,6 @@ actor QBitApi {
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
         req.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
-        req.setValue(sessionCookie, forHTTPHeaderField: "Cookie")
         if let server = activeServer {
             req.setValue(server.url, forHTTPHeaderField: "Origin")
             req.setValue("\(server.url)/", forHTTPHeaderField: "Referer")
@@ -197,7 +181,6 @@ actor QBitApi {
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
         req.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-        req.setValue(sessionCookie, forHTTPHeaderField: "Cookie")
         if let server = activeServer {
             req.setValue(server.url, forHTTPHeaderField: "Origin")
             req.setValue("\(server.url)/", forHTTPHeaderField: "Referer")
@@ -220,13 +203,13 @@ actor QBitApi {
 
     private func renewSession() async {
         guard let server = activeServer else { return }
-        let _ = await login(server: server)
+        _ = await login(server: server)
     }
 
     // MARK: - Torrent API
     func getTorrents() async throws -> [TorrentInfo] {
         let data = try await authedGetData("/api/v2/torrents/info")
-        return (try? decoder.decode([TorrentInfo].self, from: data)) ?? []
+        return try decoder.decode([TorrentInfo].self, from: data)
     }
 
     func syncMainData(rid: Int = 0) async throws -> SyncMainData? {
