@@ -23,27 +23,22 @@ struct TorrentListView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                AppColors.groupedBg.ignoresSafeArea()
+                AppColors.mainBg.ignoresSafeArea()
 
                 if isLoading {
                     VStack {
                         SkeletonBar(height: 16)
                         SkeletonBar(height: 16)
-                        SkeletonBar(height: 16)
-                        SkeletonBar(height: 16)
                     }
                     .padding(.horizontal, 20)
-                }
-                else if let errorMsg = errorMessage {
+                } else if let errorMsg = errorMessage {
                     VStack(spacing: 16) {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .font(.system(size: 56))
                             .foregroundColor(AppColors.danger)
-
                         Text("数据获取失败")
                             .font(.system(size: 20, weight: .bold))
                             .foregroundColor(.primary)
-
                         ScrollView {
                             Text(errorMsg)
                                 .font(.system(size: 13, design: .monospaced))
@@ -57,7 +52,6 @@ struct TorrentListView: View {
                                 .fill(Color.black.opacity(0.1))
                         )
                         .padding(.horizontal, 24)
-
                         Button {
                             isLoading = true
                             errorMessage = nil
@@ -71,45 +65,59 @@ struct TorrentListView: View {
                                 .background(Capsule().fill(AppColors.accent))
                         }
                     }
-                }
-                else if filteredTorrents.isEmpty {
+                } else if filteredTorrents.isEmpty {
                     VStack(spacing: 12) {
                         Image(systemName: "square.stack")
                             .font(.system(size: 48))
                             .foregroundColor(AppColors.placeholder)
                         Text(filter == .all ? "暂无种子" : "没有匹配的种子")
-                            .subtitle()
+                            .foregroundColor(AppColors.secondaryLabel)
                     }
                 } else {
                     List {
                         if globalDlSpeed > 0 || globalUpSpeed > 0 {
-                            Section {
-                                HStack {
-                                    SpeedBadge(speed: globalDlSpeed)
+                            HStack(spacing: 16) {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "arrow.down")
+                                        .font(.system(size: 12, weight: .bold))
                                         .foregroundColor(AppColors.accent)
-                                    Text("↓")
-                                        .caption(AppColors.tertiaryLabel)
-                                    SpeedBadge(speed: globalUpSpeed)
-                                        .foregroundColor(AppColors.success)
-                                    Text("↑")
-                                        .caption(AppColors.tertiaryLabel)
-                                    Spacer()
+                                    Text(formatSpeed(globalDlSpeed))
+                                        .font(.system(size: 14, weight: .semibold, design: .monospaced))
+                                        .foregroundColor(AppColors.accent)
                                 }
-                                .padding(.vertical, 4)
-                                .listRowBackground(AppColors.card)
+                                HStack(spacing: 4) {
+                                    Image(systemName: "arrow.up")
+                                        .font(.system(size: 12, weight: .bold))
+                                        .foregroundColor(AppColors.success)
+                                    Text(formatSpeed(globalUpSpeed))
+                                        .font(.system(size: 14, weight: .semibold, design: .monospaced))
+                                        .foregroundColor(AppColors.success)
+                                }
+                                Spacer()
                             }
+                            .padding(.vertical, 8)
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
+                            .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 20))
                         }
 
                         Section {
                             ForEach(filteredTorrents) { torrent in
-                                NavigationLink(destination: TorrentDetailView(hash: torrent.hash)) {
+                                ZStack {
+                                    NavigationLink(destination: TorrentDetailView(hash: torrent.hash)) {
+                                        EmptyView()
+                                    }
+                                    .opacity(0)
                                     TorrentRow(torrent: torrent)
                                 }
                                 .listRowBackground(AppColors.card)
+                                .listRowSeparator(.hidden)
+                                .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
                             }
                         }
                     }
                     .listStyle(.insetGrouped)
+                    .scrollContentBackground(.hidden)
                 }
             }
             .navigationTitle("种子")
@@ -123,9 +131,7 @@ struct TorrentListView: View {
                 }
             }
             .onAppear { refresh() }
-            .onReceive(timer) { _ in
-                if errorMessage == nil { refresh() }
-            }
+            .onReceive(timer) { _ in refresh() }
             .sheet(isPresented: $showAddTorrent) {
                 AddTorrentView()
             }
@@ -148,19 +154,19 @@ struct TorrentListView: View {
                     } label: {
                         VStack(spacing: 6) {
                             Text(f.rawValue)
-                                .subtitle(filter == f ? AppColors.label : AppColors.secondaryLabel)
-                                .fontWeight(filter == f ? .semibold : .regular)
+                                .font(.system(size: 15, weight: filter == f ? .semibold : .medium))
+                                .foregroundColor(filter == f ? AppColors.label : AppColors.secondaryLabel)
                                 .padding(.vertical, 8)
 
                             if filter == f {
-                                RoundedRectangle(cornerRadius: 1)
+                                RoundedRectangle(cornerRadius: 1.5, style: .continuous)
                                     .fill(AppColors.accent)
-                                    .frame(width: 24, height: 1.5)
+                                    .frame(width: 24, height: 3)
                                     .matchedGeometryEffect(id: "underline", in: animationNamespace)
                             } else {
-                                RoundedRectangle(cornerRadius: 1)
+                                RoundedRectangle(cornerRadius: 1.5)
                                     .fill(Color.clear)
-                                    .frame(width: 0, height: 1.5)
+                                    .frame(width: 0, height: 3)
                             }
                         }
                     }
@@ -168,19 +174,8 @@ struct TorrentListView: View {
             }
             .padding(.horizontal, 20)
         }
-        .frame(height: 36)
-        .background(AppColors.groupedBg)
-    }
-
-    private var filteredTorrents: [TorrentInfo] {
-        switch filter {
-        case .all: return torrents
-        case .downloading: return torrents.filter { $0.statusBadge == .downloading || $0.statusBadge == .metaDL }
-        case .seeding: return torrents.filter { $0.statusBadge == .uploading || $0.statusBadge == .stalledUP }
-        case .active: return torrents.filter { $0.isActive }
-        case .paused: return torrents.filter { $0.statusBadge.isPaused }
-        case .completed: return torrents.filter { $0.isCompleted }
-        }
+        .frame(height: 44)
+        .background(.ultraThinMaterial)
     }
 
     private func refresh() {
@@ -188,7 +183,6 @@ struct TorrentListView: View {
             do {
                 let list = try await QBitApi.shared.getTorrents()
                 let transfer = try? await QBitApi.shared.getTransferInfo()
-
                 await MainActor.run {
                     self.torrents = list
                     self.globalDlSpeed = transfer?.dlInfoSpeed ?? 0
@@ -210,62 +204,67 @@ private struct TorrentRow: View {
     let torrent: TorrentInfo
 
     var body: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 12) {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 14) {
                 StatusIcon(status: torrent.statusBadge)
-                    .padding(.top, 1)
 
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(alignment: .top) {
                         Text(torrent.name)
                             .font(.system(size: 16, weight: .semibold))
-                            .lineLimit(2)
                             .foregroundColor(AppColors.label)
+                            .lineLimit(2)
+                            .padding(.trailing, 8)
 
-                        Spacer()
+                        Spacer(minLength: 0)
 
                         Text(formatBytes(torrent.size))
-                            .caption(AppColors.tertiaryLabel)
+                            .font(.system(size: 14, weight: .medium, design: .monospaced))
+                            .foregroundColor(AppColors.secondaryLabel)
                     }
 
-                    HStack(spacing: 0) {
+                    HStack(spacing: 6) {
                         statusBadge
 
+                        Text("•")
+                            .foregroundColor(AppColors.tertiaryLabel)
+                            .font(.system(size: 10))
+
+                        Text("\(torrent.progressPercent)%")
+                            .font(.system(size: 12, weight: .medium, design: .monospaced))
+                            .foregroundColor(AppColors.secondaryLabel)
+
                         if torrent.dlspeed > 0 {
-                            Text("  ·  ")
-                                .caption(AppColors.tertiaryLabel)
-                            Text("↓ \(formatSpeed(torrent.dlspeed))")
-                                .caption()
+                            Text("•")
+                                .foregroundColor(AppColors.tertiaryLabel)
+                                .font(.system(size: 10))
+                            Text("↓\(formatSpeed(torrent.dlspeed))")
+                                .font(.system(size: 12, design: .monospaced))
+                                .foregroundColor(AppColors.accent)
                         }
 
                         if torrent.upspeed > 0 {
-                            Text("  ·  ")
-                                .caption(AppColors.tertiaryLabel)
-                            Text("↑ \(formatSpeed(torrent.upspeed))")
-                                .caption()
+                            Text("•")
+                                .foregroundColor(AppColors.tertiaryLabel)
+                                .font(.system(size: 10))
+                            Text("↑\(formatSpeed(torrent.upspeed))")
+                                .font(.system(size: 12, design: .monospaced))
+                                .foregroundColor(AppColors.success)
                         }
-
-                        Text("  ·  ")
-                            .caption(AppColors.tertiaryLabel)
-                        Text("\(torrent.progressPercent)%")
-                            .caption()
-
-                        if torrent.eta > 0 && torrent.eta < 8640000 {
-                            Text("  ·  ")
-                                .caption(AppColors.tertiaryLabel)
-                            Text(torrent.etaFormatted)
-                                .caption()
-                        }
-
-                        Spacer()
                     }
                 }
             }
-            .padding(.top, 14)
-            .padding(.bottom, 12)
-            .padding(.horizontal, 16)
 
-            ProgressBar(progress: torrent.progress, height: 1/UIScreen.main.scale, color: progressColor)
+            GeometryReader { geometry in
+                ZStack(alignment: .leading) {
+                    Capsule()
+                        .fill(AppColors.separator.opacity(0.5))
+                    Capsule()
+                        .fill(progressColor)
+                        .frame(width: max(0, geometry.size.width * CGFloat(torrent.progress)))
+                }
+            }
+            .frame(height: 4)
         }
     }
 
@@ -299,11 +298,11 @@ private struct StatusIcon: View {
         ZStack {
             Circle()
                 .fill(backgroundColor)
-                .frame(width: 32, height: 32)
+                .frame(width: 36, height: 36)
 
             Image(systemName: iconName)
-                .font(.system(size: 14, weight: .medium))
-                .foregroundColor(.white)
+                .font(.system(size: 15, weight: .medium))
+                .foregroundColor(iconColor)
         }
     }
 
@@ -311,21 +310,31 @@ private struct StatusIcon: View {
         switch status {
         case .downloading: return "arrow.down"
         case .uploading: return "arrow.up"
-        case .pausedDL, .pausedUP: return "pause"
-        case .error, .missingFiles: return "exclamationmark"
+        case .pausedDL, .pausedUP: return "pause.fill"
+        case .error, .missingFiles: return "exclamationmark.triangle.fill"
         case .checkingDL, .checkingUP, .checkingResumeData: return "arrow.triangle.2.circlepath"
         case .metaDL: return "doc.text.magnifyingglass"
-        default: return "circle"
+        default: return "circle.fill"
         }
     }
 
     private var backgroundColor: Color {
         switch status {
-        case .uploading, .stalledUP: return AppColors.success.opacity(0.2)
-        case .downloading, .metaDL: return AppColors.accent.opacity(0.2)
-        case .error, .missingFiles: return AppColors.danger.opacity(0.2)
-        case .pausedDL, .pausedUP: return AppColors.tertiaryLabel.opacity(0.2)
-        default: return AppColors.separator
+        case .uploading, .stalledUP: return AppColors.success.opacity(0.15)
+        case .downloading, .metaDL: return AppColors.accent.opacity(0.15)
+        case .error, .missingFiles: return AppColors.danger.opacity(0.15)
+        case .pausedDL, .pausedUP: return AppColors.tertiaryLabel.opacity(0.15)
+        default: return AppColors.separator.opacity(0.3)
+        }
+    }
+
+    private var iconColor: Color {
+        switch status {
+        case .uploading, .stalledUP: return AppColors.success
+        case .downloading, .metaDL: return AppColors.accent
+        case .error, .missingFiles: return AppColors.danger
+        case .pausedDL, .pausedUP: return AppColors.secondaryLabel
+        default: return AppColors.secondaryLabel
         }
     }
 }
