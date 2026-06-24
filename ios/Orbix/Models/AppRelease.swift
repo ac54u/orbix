@@ -1,6 +1,6 @@
 import Foundation
 
-struct AppRelease: Codable, Identifiable {
+struct AppRelease: Decodable, Identifiable {
     var id: String { tag }
     let tag: String
     let notes: String
@@ -17,7 +17,7 @@ struct AppRelease: Codable, Identifiable {
         case htmlUrl = "html_url"
     }
 
-    struct Asset: Codable {
+    struct Asset: Decodable {
         let name: String
         let size: Int64
         let url: String?
