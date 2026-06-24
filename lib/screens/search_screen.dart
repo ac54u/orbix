@@ -471,7 +471,7 @@ class _SearchScreenState extends State<SearchScreen> with TickerProviderStateMix
         ),
       ],
       child: GestureDetector(
-        onTap: () => _openFullScreen(index),
+        onTap: () => _showDetailSheet(r, index),
         child: TweenAnimationBuilder<double>(
           tween: _cardTween,
           duration: _cardDuration,
@@ -555,7 +555,7 @@ class _SearchScreenState extends State<SearchScreen> with TickerProviderStateMix
   }
 
   // ── 详情 Sheet ──
-  void _showDetailSheet(Map r) {
+  void _showDetailSheet(Map r, [int? index]) {
     final code = (r['code'] ?? '').toString();
     final sizeStr = (r['sizeStr'] ?? '').toString();
     final thumb = (r['thumbnail'] ?? '').toString();
@@ -573,7 +573,6 @@ class _SearchScreenState extends State<SearchScreen> with TickerProviderStateMix
         final hasDesc = rawDesc != null && rawDesc.isNotEmpty;
         bool translationTriggered = false;
         String? localDesc;
-        final debugCode = r['code'] as String?;
 
         return StatefulBuilder(
           builder: (context, setSheetState) {
@@ -602,16 +601,22 @@ class _SearchScreenState extends State<SearchScreen> with TickerProviderStateMix
                   child: Column(
                     children: [
                       if (thumb.isNotEmpty)
-                        Container(
-                          width: double.infinity,
-                          constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.45),
-                          color: Colors.black,
-                          child: Image.network(thumb, fit: BoxFit.contain,
-                            errorBuilder: (_, __, ___) => const Icon(CupertinoIcons.photo, color: Colors.white54, size: 48),
-                            loadingBuilder: (_, child, progress) {
-                              if (progress == null) return child;
-                              return const Center(child: CupertinoActivityIndicator());
-                            },
+                        GestureDetector(
+                          onTap: () {
+                            Navigator.pop(context);
+                            if (index != null) _openFullScreen(index);
+                          },
+                          child: Container(
+                            width: double.infinity,
+                            constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.45),
+                            color: Colors.black,
+                            child: Image.network(thumb, fit: BoxFit.contain,
+                              errorBuilder: (_, __, ___) => const Icon(CupertinoIcons.photo, color: Colors.white54, size: 48),
+                              loadingBuilder: (_, child, progress) {
+                                if (progress == null) return child;
+                                return const Center(child: CupertinoActivityIndicator());
+                              },
+                            ),
                           ),
                         ),
                       Padding(
@@ -630,31 +635,37 @@ class _SearchScreenState extends State<SearchScreen> with TickerProviderStateMix
                               if (date.isNotEmpty) ...[const SizedBox(width: 8), _metaChip(CupertinoIcons.calendar, date)],
                             ]),
                             const SizedBox(height: 12),
-                            Container(
-                              width: double.infinity,
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: AppColors.of(AppColors.card),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    localDesc ?? rawDesc ?? 'rawDesc=null hasDesc=$hasDesc code=$debugCode',
-                                    style: AppTypography.body().copyWith(fontSize: 13, height: 1.5),
-                                  ),
-                                  if (hasDesc && localDesc == null) ...[
-                                    const SizedBox(height: 6),
-                                    Row(children: [
-                                      const CupertinoActivityIndicator(radius: 6),
-                                      const SizedBox(width: 6),
-                                      Text('翻译中…', style: AppTypography.caption(color: AppColors.of(AppColors.tertiaryLabel))),
-                                    ]),
+                            if (hasDesc)
+                              Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: AppColors.of(AppColors.card),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      localDesc ?? rawDesc,
+                                      style: AppTypography.body().copyWith(fontSize: 13, height: 1.5),
+                                    ),
+                                    if (localDesc == null) ...[
+                                      const SizedBox(height: 6),
+                                      Row(children: [
+                                        const CupertinoActivityIndicator(radius: 6),
+                                        const SizedBox(width: 6),
+                                        Text('翻译中…', style: AppTypography.caption(color: AppColors.of(AppColors.tertiaryLabel))),
+                                      ]),
+                                    ],
                                   ],
-                                ],
+                                ),
+                              )
+                            else
+                              Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 8),
+                                child: Text('暂无简介', style: AppTypography.caption(color: AppColors.of(AppColors.tertiaryLabel))),
                               ),
-                            ),
                             const SizedBox(height: 16),
                             _actionBtn('添加到下载队列', CupertinoIcons.arrow_down_circle, AppColors.accent,
                               () { Navigator.pop(context); _addMagnet(magnet); }),
