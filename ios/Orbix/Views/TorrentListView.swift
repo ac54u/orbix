@@ -31,6 +31,37 @@ struct TorrentListView: View {
                         SkeletonBar(height: 16)
                     }
                     .padding(.horizontal, 20)
+                } else if let errorMsg = errorMessage {
+                    VStack(spacing: 16) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: 56))
+                            .foregroundColor(AppColors.danger)
+                        Text("数据获取失败")
+                            .font(.system(size: 20, weight: .bold))
+                            .foregroundColor(.primary)
+                        ScrollView {
+                            Text(errorMsg)
+                                .font(.system(size: 13, design: .monospaced))
+                                .foregroundColor(.secondary)
+                                .multilineTextAlignment(.leading)
+                                .padding()
+                        }
+                        .frame(maxHeight: 150)
+                        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color.black.opacity(0.1)))
+                        .padding(.horizontal, 24)
+                        Button {
+                            isLoading = true
+                            errorMessage = nil
+                            refresh()
+                        } label: {
+                            Text("重试")
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 24)
+                                .padding(.vertical, 10)
+                                .background(Capsule().fill(AppColors.accent))
+                        }
+                    }
                 } else if filteredTorrents.isEmpty {
                     VStack(spacing: 12) {
                         Image(systemName: "square.stack")
