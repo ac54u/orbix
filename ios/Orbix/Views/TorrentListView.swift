@@ -70,6 +70,7 @@ struct TorrentListView: View {
                         }
                     }
                     .listStyle(.insetGrouped)
+                }
             }
             .navigationTitle("种子")
             .toolbar {
