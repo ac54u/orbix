@@ -20,8 +20,6 @@ import '../widgets/toast.dart';
 
 enum _OnlineState { idle, loading, results, empty, error }
 
-enum _DescState { idle, loading, done }
-
 class Debouncer {
   final int milliseconds;
   Timer? _timer;
@@ -572,19 +570,17 @@ class _SearchScreenState extends State<SearchScreen> with TickerProviderStateMix
       builder: (ctx) {
         final fileName = (r['fileName'] ?? '').toString();
         final rawDesc = (r['description'] ?? '') as String?;
-        _DescState descState = (rawDesc != null && rawDesc.isNotEmpty)
-            ? _DescState.loading
-            : _DescState.done;
+        final hasDesc = rawDesc != null && rawDesc.isNotEmpty;
+        bool translationTriggered = false;
         String? localDesc;
 
         return StatefulBuilder(
           builder: (context, setSheetState) {
-            if (descState == _DescState.loading && rawDesc != null) {
-              descState = _DescState.idle;
+            if (hasDesc && !translationTriggered) {
+              translationTriggered = true;
               TorrentSearchService.instance.translateDescription(rawDesc).then((desc) {
                 setSheetState(() {
                   localDesc = desc;
-                  descState = _DescState.done;
                 });
               });
             }
@@ -633,13 +629,7 @@ class _SearchScreenState extends State<SearchScreen> with TickerProviderStateMix
                               if (date.isNotEmpty) ...[const SizedBox(width: 8), _metaChip(CupertinoIcons.calendar, date)],
                             ]),
                             const SizedBox(height: 12),
-                            if (descState == _DescState.loading || descState == _DescState.idle)
-                              Row(children: [
-                                const CupertinoActivityIndicator(radius: 6),
-                                const SizedBox(width: 6),
-                                Text('翻译中…', style: AppTypography.caption(color: AppColors.of(AppColors.tertiaryLabel))),
-                              ])
-                            else if (descState == _DescState.done && localDesc?.isNotEmpty == true)
+                            if (hasDesc)
                               Container(
                                 width: double.infinity,
                                 padding: const EdgeInsets.all(12),
@@ -647,12 +637,25 @@ class _SearchScreenState extends State<SearchScreen> with TickerProviderStateMix
                                   color: AppColors.of(AppColors.card),
                                   borderRadius: BorderRadius.circular(8),
                                 ),
-                                child: Text(
-                                  localDesc!,
-                                  style: AppTypography.body().copyWith(fontSize: 13, height: 1.5),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      localDesc ?? rawDesc,
+                                      style: AppTypography.body().copyWith(fontSize: 13, height: 1.5),
+                                    ),
+                                    if (localDesc == null) ...[
+                                      const SizedBox(height: 6),
+                                      Row(children: [
+                                        const CupertinoActivityIndicator(radius: 6),
+                                        const SizedBox(width: 6),
+                                        Text('翻译中…', style: AppTypography.caption(color: AppColors.of(AppColors.tertiaryLabel))),
+                                      ]),
+                                    ],
+                                  ],
                                 ),
                               )
-                            else if (descState == _DescState.done)
+                            else
                               Padding(
                                 padding: const EdgeInsets.symmetric(vertical: 8),
                                 child: Text('暂无简介', style: AppTypography.caption(color: AppColors.of(AppColors.tertiaryLabel))),
