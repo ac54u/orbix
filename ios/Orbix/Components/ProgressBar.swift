@@ -2,7 +2,7 @@ import SwiftUI
 
 struct ProgressBar: View {
     let progress: Double
-    var height: CGFloat = 2
+    var height: CGFloat = 0.5  // hairline: 1 pixel (0.5 pt on 2x display)
     var color: Color = AppColors.accent
 
     var body: some View {

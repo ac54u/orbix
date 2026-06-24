@@ -76,34 +76,48 @@ struct TorrentDetailView: View {
     @ViewBuilder
     private func heroSection(_ torrent: TorrentInfo) -> some View {
         Section {
-            VStack(spacing: 12) {
+            VStack(spacing: 8) {
                 Text(torrent.name)
-                    .cardTitle()
-                    .lineLimit(2)
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundColor(AppColors.secondaryLabel)
+                    .lineLimit(3)
                     .multilineTextAlignment(.center)
 
                 Text("\(torrent.progressPercent)%")
                     .hero(AppColors.accent)
 
-                HStack(spacing: 16) {
-                    Label(torrent.statusBadge.displayName, systemImage: "circle.fill")
+                HStack(spacing: 6) {
+                    Image(systemName: "circle.fill")
+                        .font(.system(size: 6))
+                        .foregroundColor(statusColor(torrent))
+                    Text(torrent.statusBadge.displayName)
                         .caption(statusColor(torrent))
-                    SpeedBadge(speed: torrent.dlspeed)
-                        .foregroundColor(AppColors.accent)
-                    Text("↓")
-                        .caption()
-                    SpeedBadge(speed: torrent.upspeed)
-                        .foregroundColor(AppColors.success)
-                    Text("↑")
-                        .caption()
+                    
+                    if torrent.dlspeed > 0 {
+                        Text("  ·  ")
+                            .caption(AppColors.tertiaryLabel)
+                        Text("↓ \(formatSpeed(torrent.dlspeed))")
+                            .caption()
+                    }
+                    
+                    if torrent.upspeed > 0 {
+                        Text("  ·  ")
+                            .caption(AppColors.tertiaryLabel)
+                        Text("↑ \(formatSpeed(torrent.upspeed))")
+                            .caption()
+                    }
+                    
+                    Spacer()
                 }
 
-                ProgressBar(progress: torrent.progress, color: progressColor(torrent))
+                ProgressBar(progress: torrent.progress, height: 2, color: progressColor(torrent))
                     .padding(.horizontal, 4)
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 12)
+            .padding(.vertical, 28)
+            .padding(.horizontal, 20)
             .listRowBackground(AppColors.card)
+            .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
         }
     }
 
@@ -122,25 +136,29 @@ struct TorrentDetailView: View {
 
     private func actionButtons(_ torrent: TorrentInfo) -> some View {
         Section {
-            HStack(spacing: 8) {
+            HStack(spacing: 4) {
                 ActionButton(
                     icon: torrent.statusBadge.isPaused ? "play.fill" : "pause.fill",
-                    label: torrent.statusBadge.isPaused ? "开始" : "暂停",
+                    label: torrent.statusBadge.isPaused ? "启动" : "暂停",
+                    color: torrent.statusBadge.isPaused ? AppColors.success : AppColors.warning,
                     action: { togglePause(torrent) }
                 )
                 ActionButton(
                     icon: "bolt.fill",
                     label: "强制",
+                    color: AppColors.accent,
                     action: { forceStart(torrent) }
                 )
                 ActionButton(
-                    icon: "arrow.triangle.2.circlepath",
+                    icon: "checkmark.shield.fill",
                     label: "校验",
+                    color: AppColors.accent,
                     action: { recheck(torrent) }
                 )
                 ActionButton(
-                    icon: "arrow.clockwise",
-                    label: "重新通告",
+                    icon: "antenna.radiowaves.left.and.right",
+                    label: "汇报",
+                    color: AppColors.accent,
                     action: { reannounce(torrent) }
                 )
             }
@@ -270,6 +288,7 @@ struct TorrentDetailView: View {
 private struct ActionButton: View {
     let icon: String
     let label: String
+    var color: Color = AppColors.accent
     let action: () -> Void
 
     var body: some View {
@@ -278,17 +297,14 @@ private struct ActionButton: View {
         } label: {
             VStack(spacing: 6) {
                 Image(systemName: icon)
-                    .font(.title3)
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundColor(color)
                 Text(label)
-                    .caption()
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(AppColors.secondaryLabel)
             }
-            .foregroundColor(AppColors.label)
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 10)
-            .background(
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(AppColors.elevated)
-            )
+            .padding(.vertical, 12)
         }
     }
 }
