@@ -49,6 +49,8 @@ class TorrentSearchService {
   TorrentSearchService._();
   static final TorrentSearchService instance = TorrentSearchService._();
 
+  final Map<String, String> _translationCache = {};
+
   static const String _base = 'https://www.141ppv.com';
 
   final Dio _dio = Dio(BaseOptions(
@@ -197,10 +199,13 @@ class TorrentSearchService {
     return items;
   }
 
-  /// 翻译已从列表页抓取到的简介文本。
+  /// 翻译已从列表页抓取到的简介文本（带缓存）。
   Future<String> translateDescription(String raw) async {
+    if (_translationCache.containsKey(raw)) return _translationCache[raw]!;
     try {
-      return await TranslateService.instance.toChinese(raw);
+      final result = await TranslateService.instance.toChinese(raw);
+      _translationCache[raw] = result;
+      return result;
     } catch (_) {
       return raw;
     }

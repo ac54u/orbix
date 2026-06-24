@@ -638,20 +638,32 @@ class _SearchScreenState extends State<SearchScreen> with TickerProviderStateMix
                             if (hasDesc)
                               Container(
                                 width: double.infinity,
-                                padding: const EdgeInsets.all(12),
+                                padding: const EdgeInsets.all(14),
                                 decoration: BoxDecoration(
                                   color: AppColors.of(AppColors.card),
-                                  borderRadius: BorderRadius.circular(8),
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(color: AppColors.of(AppColors.separator), width: 0.5),
                                 ),
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text(
-                                      localDesc ?? rawDesc,
-                                      style: AppTypography.body().copyWith(fontSize: 13, height: 1.5),
-                                    ),
-                                    if (localDesc == null) ...[
-                                      const SizedBox(height: 6),
+                                    if (localDesc != null) ...[
+                                      Text(localDesc!, style: AppTypography.body().copyWith(fontSize: 14, height: 1.6)),
+                                      const SizedBox(height: 10),
+                                      Container(height: 1, color: AppColors.of(AppColors.separator)),
+                                      const SizedBox(height: 10),
+                                      Row(
+                                        children: [
+                                          Icon(CupertinoIcons.doc_text, size: 12, color: AppColors.of(AppColors.tertiaryLabel)),
+                                          const SizedBox(width: 4),
+                                          Text('原文（日文）', style: AppTypography.caption(color: AppColors.of(AppColors.tertiaryLabel))),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(rawDesc, style: AppTypography.subtitle().copyWith(fontSize: 12, height: 1.5)),
+                                    ] else ...[
+                                      Text(rawDesc, style: AppTypography.body().copyWith(fontSize: 14, height: 1.6)),
+                                      const SizedBox(height: 8),
                                       Row(children: [
                                         const CupertinoActivityIndicator(radius: 6),
                                         const SizedBox(width: 6),
