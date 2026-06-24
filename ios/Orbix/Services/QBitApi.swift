@@ -280,7 +280,6 @@ actor QBitApi {
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
         req.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
-        req.setValue(sessionCookie, forHTTPHeaderField: "Cookie")
         if let server = activeServer {
             req.setValue(server.url, forHTTPHeaderField: "Origin")
             req.setValue("\(server.url)/", forHTTPHeaderField: "Referer")
