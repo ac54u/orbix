@@ -749,6 +749,7 @@ class _SearchScreenState extends State<SearchScreen> with TickerProviderStateMix
         width: double.infinity,
         height: 50,
         child: CupertinoButton(
+          padding: EdgeInsets.zero,
           onPressed: onTap,
           color: AppColors.accent,
           borderRadius: BorderRadius.circular(12),
@@ -767,6 +768,7 @@ class _SearchScreenState extends State<SearchScreen> with TickerProviderStateMix
       width: double.infinity,
       height: 46,
       child: CupertinoButton(
+        padding: EdgeInsets.zero,
         onPressed: onTap,
         borderRadius: BorderRadius.circular(12),
         child: Container(
