@@ -110,7 +110,7 @@ class TorrentSearchService {
       if (resp.data is String) {
         return _parseList(resp.data as String);
       }
-    } on DioException catch (e) {
+    } catch (e) {
       debugPrint('141ppv page $page fetch error: $e');
     }
     return null;
@@ -131,52 +131,57 @@ class TorrentSearchService {
     );
 
     for (final m in magnetRE.allMatches(html)) {
-      final magnet = m.group(1) ?? '';
-      if (magnet.isEmpty) continue;
+      try {
+        final magnet = m.group(1) ?? '';
+        if (magnet.isEmpty) continue;
 
-      // 动态回看至当前 card 开头，确保上下文包含所有字段
-      final cardStart = html.lastIndexOf('<div class="card mb-3">', m.start);
-      final ctxStart = cardStart >= 0 ? cardStart : (m.start - 3000).clamp(0, html.length);
-      final ctx = html.substring(ctxStart, m.end);
+        // 动态回看至当前 card 开头，确保上下文包含所有字段
+        final cardStart = html.lastIndexOf('<div class="card mb-3">', m.start);
+        final ctxStart = cardStart >= 0 ? cardStart : (m.start - 3000).clamp(0, html.length);
+        if (ctxStart > m.end) continue;
+        final ctx = html.substring(ctxStart, m.end);
 
-      final imgRE = RegExp(
-        r'<img[^>]*\s+src="([^"]+)"[^>]*>',
-        caseSensitive: false,
-      );
-      final imgMatches = imgRE.allMatches(ctx).toList();
-      final thumb = imgMatches.isNotEmpty ? imgMatches.last.group(1) ?? '' : '';
+        final imgRE = RegExp(
+          r'<img[^>]*\s+src="([^"]+)"[^>]*>',
+          caseSensitive: false,
+        );
+        final imgMatches = imgRE.allMatches(ctx).toList();
+        final thumb = imgMatches.isNotEmpty ? imgMatches.last.group(1) ?? '' : '';
 
-      final torRE = RegExp(
-        r'<a[^>]*\s+href="(/torrent/([^"]+))"[^>]*>([^<]+)</a>',
-        caseSensitive: false,
-      );
-      final torM = torRE.firstMatch(ctx);
-      if (torM == null) continue;
-      final torrentPath = torM.group(1) ?? '';
-      final code = torM.group(2) ?? '';
-      final nameFromH5 = torM.group(4) ?? '';
+        final torRE = RegExp(
+          r'<a[^>]*\s+href="(/torrent/([^"]+))"[^>]*>([^<]+)</a>',
+          caseSensitive: false,
+        );
+        final torM = torRE.firstMatch(ctx);
+        if (torM == null) continue;
+        final torrentPath = torM.group(1) ?? '';
+        final code = torM.group(2) ?? '';
+        final nameFromH5 = torM.group(4) ?? '';
 
-      final dateRE = RegExp(
-        r'<a[^>]*\s+href="(/date/[^"]*)"[^>]*>([^<]+)</a>',
-        caseSensitive: false,
-      );
-      final dateM = dateRE.firstMatch(ctx);
-      final date = dateM?.group(2) ?? '';
+        final dateRE = RegExp(
+          r'<a[^>]*\s+href="(/date/[^"]*)"[^>]*>([^<]+)</a>',
+          caseSensitive: false,
+        );
+        final dateM = dateRE.firstMatch(ctx);
+        final date = dateM?.group(2) ?? '';
 
-      final size = _extractSize(ctx, 0, ctx.length) ?? '';
+        final size = _extractSize(ctx, 0, ctx.length) ?? '';
 
-      items.add(ScrapedTorrent(
-        code: code.trim(),
-        title: nameFromH5.trim().isNotEmpty
-            ? nameFromH5.trim()
-            : code.trim(),
-        size: size,
-        date: date.trim(),
-        thumbnail: thumb.startsWith('http') ? thumb : null,
-        magnet: magnet,
-        torrentUrl: '$_base/download/$code.torrent',
-        pageUrl: '$_base$torrentPath',
-      ));
+        items.add(ScrapedTorrent(
+          code: code.trim(),
+          title: nameFromH5.trim().isNotEmpty
+              ? nameFromH5.trim()
+              : code.trim(),
+          size: size,
+          date: date.trim(),
+          thumbnail: thumb.startsWith('http') ? thumb : null,
+          magnet: magnet,
+          torrentUrl: '$_base/download/$code.torrent',
+          pageUrl: '$_base$torrentPath',
+        ));
+      } catch (e) {
+        debugPrint('141ppv parse item error: $e');
+      }
     }
 
     return items;
