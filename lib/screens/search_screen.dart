@@ -161,6 +161,7 @@ class _SearchScreenState extends State<SearchScreen> with TickerProviderStateMix
     'fileName': item.title, 'fileUrl': item.magnet, 'code': item.code,
     'thumbnail': item.thumbnail ?? '', 'sizeStr': item.size, 'date': item.date,
     'pageUrl': item.pageUrl, 'torrentUrl': item.torrentUrl,
+    'description': item.description,
   };
 
   void _addMagnet(String url) async {
@@ -569,15 +570,18 @@ class _SearchScreenState extends State<SearchScreen> with TickerProviderStateMix
     showCupertinoModalPopup(
       context: context,
       builder: (ctx) {
-        _DescState descState = _DescState.idle;
-        String? localDesc;
         final fileName = (r['fileName'] ?? '').toString();
+        final rawDesc = (r['description'] ?? '') as String?;
+        _DescState descState = (rawDesc != null && rawDesc.isNotEmpty)
+            ? _DescState.loading
+            : _DescState.done;
+        String? localDesc;
 
         return StatefulBuilder(
           builder: (context, setSheetState) {
-            if (descState == _DescState.idle && pageUrl.isNotEmpty) {
-              descState = _DescState.loading;
-              TorrentSearchService.instance.fetchDescription(pageUrl).then((desc) {
+            if (descState == _DescState.loading && rawDesc != null) {
+              descState = _DescState.idle;
+              TorrentSearchService.instance.translateDescription(rawDesc).then((desc) {
                 setSheetState(() {
                   localDesc = desc;
                   descState = _DescState.done;
@@ -629,11 +633,11 @@ class _SearchScreenState extends State<SearchScreen> with TickerProviderStateMix
                               if (date.isNotEmpty) ...[const SizedBox(width: 8), _metaChip(CupertinoIcons.calendar, date)],
                             ]),
                             const SizedBox(height: 12),
-                            if (descState == _DescState.loading)
+                            if (descState == _DescState.loading || descState == _DescState.idle)
                               Row(children: [
                                 const CupertinoActivityIndicator(radius: 6),
                                 const SizedBox(width: 6),
-                                Text('加载作品简介…', style: AppTypography.caption(color: AppColors.of(AppColors.tertiaryLabel))),
+                                Text('翻译中…', style: AppTypography.caption(color: AppColors.of(AppColors.tertiaryLabel))),
                               ])
                             else if (descState == _DescState.done && localDesc?.isNotEmpty == true)
                               Container(

@@ -139,6 +139,11 @@ class TorrentSearchService {
       r'(\d+\.?\d*\s*(?:GB|MB|TB|KB))',
       caseSensitive: false,
     );
+    final descRE = RegExp(
+      r'<p\s+class="level\s+has-text-grey-dark">\s*(.*?)\s*</p>',
+      caseSensitive: false,
+      dotAll: true,
+    );
 
     final cardMatches = cardRE.allMatches(html).toList();
     for (int i = 0; i < cardMatches.length; i++) {
@@ -167,6 +172,9 @@ class TorrentSearchService {
         final sizeM = sizeRE.firstMatch(cardHtml);
         final size = (sizeM != null) ? sizeM.group(1)!.trim() : '';
 
+        final descM = descRE.firstMatch(cardHtml);
+        final description = descM?.group(1)?.trim();
+
         items.add(ScrapedTorrent(
           code: code,
           title: title.isNotEmpty ? title : code,
@@ -176,7 +184,7 @@ class TorrentSearchService {
           magnet: magnet,
           torrentUrl: '$_base/download/$code.torrent',
           pageUrl: '$_base/torrent/$code',
-        ));
+        )..description = description);
       } catch (e) {
         debugPrint('141ppv parse item error: $e');
       }
@@ -185,74 +193,12 @@ class TorrentSearchService {
     return items;
   }
 
-  /// 抓取详情页并提取作品简介，自动翻译为中文。
-  Future<String?> fetchDescription(String pageUrl) async {
+  /// 翻译已从列表页抓取到的简介文本。
+  Future<String> translateDescription(String raw) async {
     try {
-      final resp = await _dio.get<String>(pageUrl,
-          options: Options(responseType: ResponseType.plain));
-      final html = resp.data ?? '';
-      if (html.isEmpty) return null;
-
-      String? desc;
-
-      // 1. 从卡片的可见文本 <p class="level has-text-grey-dark">
-      final visibleRE = RegExp(
-        r'<p\s+class="level\s+has-text-grey-dark">\s*(.*?)\s*</p>',
-        caseSensitive: false,
-        dotAll: true,
-      );
-      final visibleM = visibleRE.firstMatch(html);
-      if (visibleM != null) {
-        desc = visibleM.group(1)?.trim();
-        if (desc != null) {
-          desc = desc.replaceAll(RegExp(r'<[^>]*>'), '').trim();
-        }
-      }
-
-      // 2. 降级：meta description（去掉前缀）
-      if (desc == null || desc.isEmpty) {
-        final raw = _extractMetaDesc(html);
-        if (raw != null) desc = raw;
-      }
-
-      if (desc == null || desc.isEmpty) return null;
-
-      try {
-        final translated = await TranslateService.instance.toChinese(desc);
-        return translated;
-      } catch (_) {
-        return desc;
-      }
-    } catch (e) {
-      debugPrint('fetchDescription error: $e');
-      return null;
+      return await TranslateService.instance.toChinese(raw);
+    } catch (_) {
+      return raw;
     }
-  }
-
-  String? _extractMetaDesc(String html) {
-    for (final re in [
-      RegExp(
-        r'<meta[^>]*name="description"[^>]*content="([^"]*)"',
-        caseSensitive: false,
-        dotAll: true,
-      ),
-      RegExp(
-        r'<meta[^>]*property="og:description"[^>]*content="([^"]*)"',
-        caseSensitive: false,
-        dotAll: true,
-      ),
-    ]) {
-      final m = re.firstMatch(html);
-      if (m != null) {
-        final raw = m.group(1)?.trim() ?? '';
-        if (raw.isNotEmpty) {
-          return raw.replaceFirst(RegExp(
-            r'^[^(]+\([^)]+\)\s*-\s*[^-]+-\s*',
-            caseSensitive: false,
-          ), '');
-        }
-      }
-    }
-    return null;
   }
 }
