@@ -188,51 +188,35 @@ class TorrentSearchService {
   /// 抓取详情页并提取作品简介，自动翻译为中文。
   Future<String?> fetchDescription(String pageUrl) async {
     try {
-      final resp = await _dio.get(pageUrl);
-      if (resp.data is! String) return null;
-      final html = resp.data as String;
+      final resp = await _dio.get<String>(pageUrl,
+          options: Options(responseType: ResponseType.plain));
+      final html = resp.data ?? '';
+      if (html.isEmpty) return null;
 
       String? desc;
 
-      // 1. 从卡片的可见文本提取
+      // 1. 从卡片的可见文本 <p class="level has-text-grey-dark">
       final visibleRE = RegExp(
         r'<p\s+class="level\s+has-text-grey-dark">\s*(.*?)\s*</p>',
         caseSensitive: false,
+        dotAll: true,
       );
       final visibleM = visibleRE.firstMatch(html);
       if (visibleM != null) {
         desc = visibleM.group(1)?.trim();
+        if (desc != null) {
+          desc = desc.replaceAll(RegExp(r'<[^>]*>'), '').trim();
+        }
       }
 
       // 2. 降级：meta description（去掉前缀）
       if (desc == null || desc.isEmpty) {
-        final metaREs = [
-          RegExp(
-            r'<meta[^>]*name="description"[^>]*content="([^"]*)"',
-            caseSensitive: false,
-          ),
-          RegExp(
-            r'<meta[^>]*property="og:description"[^>]*content="([^"]*)"',
-            caseSensitive: false,
-          ),
-        ];
-        for (final re in metaREs) {
-          final m = re.firstMatch(html);
-          if (m != null) {
-            final raw = m.group(1)?.trim() ?? '';
-            // 去掉 "CODE (SIZE) - TYPE - " 前缀
-            desc = raw.replaceFirst(RegExp(
-              r'^[^(]+\([^)]+\)\s*-\s*[^-]+-\s*',
-              caseSensitive: false,
-            ), '');
-            if (desc.isNotEmpty) break;
-          }
-        }
+        final raw = _extractMetaDesc(html);
+        if (raw != null) desc = raw;
       }
 
       if (desc == null || desc.isEmpty) return null;
 
-      // 翻译为中文，失败则回退原文
       try {
         final translated = await TranslateService.instance.toChinese(desc);
         return translated;
@@ -243,5 +227,32 @@ class TorrentSearchService {
       debugPrint('fetchDescription error: $e');
       return null;
     }
+  }
+
+  String? _extractMetaDesc(String html) {
+    for (final re in [
+      RegExp(
+        r'<meta[^>]*name="description"[^>]*content="([^"]*)"',
+        caseSensitive: false,
+        dotAll: true,
+      ),
+      RegExp(
+        r'<meta[^>]*property="og:description"[^>]*content="([^"]*)"',
+        caseSensitive: false,
+        dotAll: true,
+      ),
+    ]) {
+      final m = re.firstMatch(html);
+      if (m != null) {
+        final raw = m.group(1)?.trim() ?? '';
+        if (raw.isNotEmpty) {
+          return raw.replaceFirst(RegExp(
+            r'^[^(]+\([^)]+\)\s*-\s*[^-]+-\s*',
+            caseSensitive: false,
+          ), '');
+        }
+      }
+    }
+    return null;
   }
 }

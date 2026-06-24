@@ -647,6 +647,11 @@ class _SearchScreenState extends State<SearchScreen> with TickerProviderStateMix
                                   localDesc!,
                                   style: AppTypography.body().copyWith(fontSize: 13, height: 1.5),
                                 ),
+                              )
+                            else if (descState == _DescState.done)
+                              Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 8),
+                                child: Text('暂无简介', style: AppTypography.caption(color: AppColors.of(AppColors.tertiaryLabel))),
                               ),
                             const SizedBox(height: 16),
                             _actionBtn('添加到下载队列', CupertinoIcons.arrow_down_circle, AppColors.accent,
