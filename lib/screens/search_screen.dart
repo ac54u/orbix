@@ -12,6 +12,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../services/qbit_api.dart';
 import '../services/torrent_search_service.dart';
+import '../services/torrent_translate_service.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_typography.dart';
 import '../widgets/media_viewer.dart';
@@ -53,12 +54,14 @@ class _SearchScreenState extends State<SearchScreen> with TickerProviderStateMix
   String _sizeFilter = 'all';
   final Set<String> _bookmarks = {};
 
-  static const _tabs = ['', 'FC2-PPV', 'HEYZO', 'LUXU', 'MIUM', '200GANA', 'SIRO', 'SGKI', 'BDA', 'DANDY', 'CARIB', 'HMDNV', 'MKD'];
+  static const _tabs = [''];
   static const _sizeOptions = [
     ('all', '全部'), ('small', '<1 GB'), ('medium', '1-3 GB'),
     ('large', '3-5 GB'), ('xlarge', '5 GB+'),
   ];
 
+  static final _cardTween = Tween(begin: 0.0, end: 1.0);
+  static const _cardDuration = Duration(milliseconds: 300);
   late final AnimationController _shimmerCtrl;
 
   @override
@@ -505,8 +508,8 @@ class _SearchScreenState extends State<SearchScreen> with TickerProviderStateMix
       child: GestureDetector(
         onTap: () => _openFullScreen(index),
         child: TweenAnimationBuilder<double>(
-          tween: Tween(begin: 0.0, end: 1.0),
-          duration: Duration(milliseconds: 350 + index * 25),
+          tween: _cardTween,
+          duration: _cardDuration,
           builder: (context, value, child) => Opacity(
             opacity: value,
             child: Transform.translate(offset: Offset(0, 15 * (1 - value)), child: child),
@@ -599,71 +602,118 @@ class _SearchScreenState extends State<SearchScreen> with TickerProviderStateMix
 
     showCupertinoModalPopup(
       context: context,
-      builder: (ctx) => CupertinoPageScaffold(
-        backgroundColor: AppColors.of(AppColors.groupedBg),
-        navigationBar: CupertinoNavigationBar(
-          middle: Text(code, style: const TextStyle(fontSize: 16)),
-          trailing: CupertinoButton(
-            padding: EdgeInsets.zero,
-            child: Icon(isBookmarked ? CupertinoIcons.heart_fill : CupertinoIcons.heart,
-              size: 22, color: isBookmarked ? AppColors.danger : AppColors.of(AppColors.tertiaryLabel)),
-            onPressed: () { _toggleBookmark(magnet); Navigator.pop(ctx); },
-          ),
-        ),
-        child: SafeArea(
-          child: SingleChildScrollView(
-            child: Column(
-              children: [
-                if (thumb.isNotEmpty)
-                  Container(
-                    width: double.infinity,
-                    constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.45),
-                    color: Colors.black,
-                    child: Image.network(thumb, fit: BoxFit.contain,
-                      errorBuilder: (_, __, ___) => const Icon(CupertinoIcons.photo, color: Colors.white54, size: 48),
-                      loadingBuilder: (_, child, progress) {
-                        if (progress == null) return child;
-                        return const Center(child: CupertinoActivityIndicator());
-                      },
-                    ),
-                  ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+      builder: (ctx) {
+        String? _description;
+        final fileName = (r['fileName'] ?? '').toString();
+
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            if (_description == null && pageUrl.isNotEmpty) {
+              _description = '';
+              TorrentSearchService.instance.fetchDescription(pageUrl).then((desc) {
+                setSheetState(() {
+                  _description = desc ?? '';
+                  r['description'] = _description;
+                });
+              });
+            }
+
+            final loading = _description == '';
+            final descText = loading ? null : _description;
+            final hasDesc = descText != null && descText.isNotEmpty;
+
+            return CupertinoPageScaffold(
+              backgroundColor: AppColors.of(AppColors.groupedBg),
+              navigationBar: CupertinoNavigationBar(
+                middle: Text(code, style: const TextStyle(fontSize: 16)),
+                trailing: CupertinoButton(
+                  padding: EdgeInsets.zero,
+                  child: Icon(isBookmarked ? CupertinoIcons.heart_fill : CupertinoIcons.heart,
+                    size: 22, color: isBookmarked ? AppColors.danger : AppColors.of(AppColors.tertiaryLabel)),
+                  onPressed: () { _toggleBookmark(magnet); Navigator.pop(context); },
+                ),
+              ),
+              child: SafeArea(
+                child: SingleChildScrollView(
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(code, style: AppTypography.cardTitle()),
-                      const SizedBox(height: 6),
-                      Row(children: [
-                        _metaChip(CupertinoIcons.doc, sizeStr),
-                        if (date.isNotEmpty) ...[const SizedBox(width: 8), _metaChip(CupertinoIcons.calendar, date)],
-                      ]),
-                      const SizedBox(height: 24),
-                      _actionBtn('添加到下载队列', CupertinoIcons.arrow_down_circle, AppColors.accent,
-                        () { Navigator.pop(ctx); _addMagnet(magnet); }),
-                      const SizedBox(height: 10),
-                      _actionBtn('复制磁力链接', CupertinoIcons.doc_on_doc, null,
-                        () { Clipboard.setData(ClipboardData(text: magnet)); _toast('磁力已复制', ok: true); }),
-                      const SizedBox(height: 10),
-                      _actionBtn('下载 .torrent 文件', CupertinoIcons.down_arrow, null,
-                        () { Navigator.pop(ctx); _downloadTorrent(torrentUrl); }),
-                      if (pageUrl.isNotEmpty) ...[
-                        const SizedBox(height: 10),
-                        _actionBtn('在浏览器中打开', CupertinoIcons.globe, null, () async {
-                          final uri = Uri.tryParse(pageUrl);
-                          if (uri != null && await canLaunchUrl(uri)) {
-                            await launchUrl(uri, mode: LaunchMode.externalApplication);
-                          }
-                        }),
-                      ],
+                      if (thumb.isNotEmpty)
+                        Container(
+                          width: double.infinity,
+                          constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.45),
+                          color: Colors.black,
+                          child: Image.network(thumb, fit: BoxFit.contain,
+                            errorBuilder: (_, __, ___) => const Icon(CupertinoIcons.photo, color: Colors.white54, size: 48),
+                            loadingBuilder: (_, child, progress) {
+                              if (progress == null) return child;
+                              return const Center(child: CupertinoActivityIndicator());
+                            },
+                          ),
+                        ),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(code, style: AppTypography.cardTitle()),
+                            if (fileName.isNotEmpty) ...[
+                              const SizedBox(height: 4),
+                              Text(fileName, style: AppTypography.caption(color: AppColors.of(AppColors.tertiaryLabel))),
+                            ],
+                            const SizedBox(height: 6),
+                            Row(children: [
+                              _metaChip(CupertinoIcons.doc, sizeStr),
+                              if (date.isNotEmpty) ...[const SizedBox(width: 8), _metaChip(CupertinoIcons.calendar, date)],
+                            ]),
+                            const SizedBox(height: 12),
+                            if (loading)
+                              Row(children: [
+                                const CupertinoActivityIndicator(radius: 6),
+                                const SizedBox(width: 6),
+                                Text('加载作品简介…', style: AppTypography.caption(color: AppColors.of(AppColors.tertiaryLabel))),
+                              ])
+                            else if (hasDesc)
+                              Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: AppColors.of(AppColors.card),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  descText!,
+                                  style: AppTypography.body().copyWith(fontSize: 13, height: 1.5),
+                                ),
+                              ),
+                            const SizedBox(height: 16),
+                            _actionBtn('添加到下载队列', CupertinoIcons.arrow_down_circle, AppColors.accent,
+                              () { Navigator.pop(context); _addMagnet(magnet); }),
+                            const SizedBox(height: 10),
+                            _actionBtn('复制磁力链接', CupertinoIcons.doc_on_doc, null,
+                              () { Clipboard.setData(ClipboardData(text: magnet)); _toast('磁力已复制', ok: true); }),
+                            const SizedBox(height: 10),
+                            _actionBtn('下载 .torrent 文件', CupertinoIcons.down_arrow, null,
+                              () { Navigator.pop(context); _downloadTorrent(torrentUrl); }),
+                            if (pageUrl.isNotEmpty) ...[
+                              const SizedBox(height: 10),
+                              _actionBtn('在浏览器中打开', CupertinoIcons.globe, null, () async {
+                                final uri = Uri.tryParse(pageUrl);
+                                if (uri != null && await canLaunchUrl(uri)) {
+                                  await launchUrl(uri, mode: LaunchMode.externalApplication);
+                                }
+                              }),
+                            ],
+                          ],
+                        ),
+                      ),
                     ],
                   ),
                 ),
-              ],
-            ),
-          ),
-        ),
-      ),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 

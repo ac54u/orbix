@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'torrent_translate_service.dart';
 import 'package:flutter/foundation.dart';
 
 /// 141ppv.com 爬虫搜索结果项。
@@ -27,7 +28,9 @@ class ScrapedTorrent {
   /// 详情页 URL。
   final String pageUrl;
 
-  const ScrapedTorrent({
+  String? description;
+
+  ScrapedTorrent({
     required this.code,
     required this.title,
     required this.size,
@@ -173,5 +176,48 @@ class TorrentSearchService {
     );
     final m = sizeRE.firstMatch(snippet);
     return m?.group(1)?.trim();
+  }
+
+  /// 抓取详情页并提取作品简介，自动翻译为中文。
+  Future<String?> fetchDescription(String pageUrl) async {
+    try {
+      final resp = await _dio.get(pageUrl);
+      if (resp.data is! String) return null;
+      final html = resp.data as String;
+
+      // 在 "作品詳細" 后的 panel-body 找描述
+      final re = RegExp(
+        r'作品詳細[\s\S]*?<div[^>]*class="panel-body"[^>]*>([\s\S]*?)</div>',
+        caseSensitive: false,
+      );
+      final m = re.firstMatch(html);
+      String? desc;
+      if (m != null) {
+        desc = m.group(1)?.trim();
+        if (desc != null) {
+          desc = desc.replaceAll(RegExp(r'<[^>]*>'), '');
+          desc = desc.replaceAll(RegExp(r'\s+'), ' ').trim();
+        }
+      }
+
+      if (desc == null || desc.isEmpty) {
+        // Fallback: og:description
+        final ogRE = RegExp(
+          r'<meta[^>]*property="og:description"[^>]*content="([^"]*)"',
+          caseSensitive: false,
+        );
+        final ogM = ogRE.firstMatch(html);
+        desc = ogM?.group(1)?.trim();
+      }
+
+      if (desc == null || desc.isEmpty) return null;
+
+      // 翻译为中文
+      final translated = await TranslateService.instance.toChinese(desc);
+      return translated;
+    } catch (e) {
+      debugPrint('fetchDescription error: $e');
+      return null;
+    }
   }
 }
