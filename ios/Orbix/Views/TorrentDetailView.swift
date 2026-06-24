@@ -44,7 +44,7 @@ struct TorrentDetailView: View {
                         filesSection
                     }
                 }
-                .insetGroupedStyle()
+                .listStyle(.insetGrouped)
             }
         }
         .navigationTitle("详情")
@@ -117,7 +117,6 @@ struct TorrentDetailView: View {
             .padding(.vertical, 28)
             .padding(.horizontal, 20)
             .listRowBackground(AppColors.card)
-            .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
         }
     }
 
@@ -206,7 +205,7 @@ struct TorrentDetailView: View {
                         .subtitle()
                         .lineLimit(1)
                     HStack {
-                        ProgressBar(progress: file.progress, height: 2)
+                        ProgressBar(progress: file.progress, height: 2, color: AppColors.accent)
                             .frame(width: 100)
                         Text("\(file.progressPercent)%")
                             .caption()
@@ -320,7 +319,7 @@ private struct DetailRow: View {
                 .subtitle()
             Spacer()
             Text(value)
-                .bodyFont(color.map { $0 } ?? AppColors.label)
+                .bodyFont(color ?? AppColors.label)
                 .multilineTextAlignment(.trailing)
         }
         .padding(.vertical, 2)

@@ -69,8 +69,7 @@ struct TorrentListView: View {
                             }
                         }
                     }
-                    .insetGroupedStyle()
-                }
+                    .listStyle(.insetGrouped)
             }
             .navigationTitle("种子")
             .toolbar {
@@ -217,7 +216,8 @@ private struct TorrentRow: View {
                     }
                 }
             }
-            .padding(.vertical, 12)
+            .padding(.top, 14)
+            .padding(.bottom, 12)
             .padding(.horizontal, 16)
 
             ProgressBar(progress: torrent.progress, height: 1/UIScreen.main.scale, color: progressColor)
