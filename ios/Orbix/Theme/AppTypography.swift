@@ -12,7 +12,6 @@ enum AppTypography {
 
     static func largeTitle(_ color: Color = AppColors.label) -> Font {
         .system(size: 34, weight: .bold)
-            .leading(.tight)
     }
 
     static func cardTitle(_ color: Color = AppColors.label) -> Font {

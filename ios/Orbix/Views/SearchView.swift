@@ -18,7 +18,7 @@ struct SearchView: View {
         case error(String)
     }
 
-    private let debounceQueue = DispatchQueue.main
+    @State private var searchTask: Task<Void, Never>?
 
     var body: some View {
         NavigationStack {
@@ -172,12 +172,13 @@ struct SearchView: View {
     }
 
     private func debounceSearch() {
-        debounceQueue.cancelPreviousPerformRequests(withTarget: self)
-        debounceQueue.perform(#selector(doSearch), with: nil, afterDelay: 0.4)
-    }
-
-    @objc private func doSearch() {
-        Task { await search() }
+        searchTask?.cancel()
+        searchTask = Task {
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            if !Task.isCancelled {
+                await search()
+            }
+        }
     }
 
     private func search() async {

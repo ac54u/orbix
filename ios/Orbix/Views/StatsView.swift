@@ -48,7 +48,7 @@ struct StatsView: View {
                 Text("当前总速度")
                     .sectionHeader()
 
-                HStack(alignment: .firstBaseline, spacing: 4) {
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
                     Text(formattedHeroSpeed)
                         .hero(AppColors.accent)
                     Text("B/s")

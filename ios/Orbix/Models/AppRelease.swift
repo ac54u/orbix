@@ -2,15 +2,15 @@ import Foundation
 
 struct AppRelease: Codable, Identifiable {
     var id: String { tag }
-    let version: String
     let tag: String
     let notes: String
     let ipaUrl: String?
     let ipaSize: Int64?
     let htmlUrl: String
 
+    var version: String { tag }
+
     enum CodingKeys: String, CodingKey {
-        case version = "tag_name"
         case tag = "tag_name"
         case notes = "body"
         case assets = "assets"
@@ -32,7 +32,6 @@ struct AppRelease: Codable, Identifiable {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         tag = try container.decode(String.self, forKey: .tag)
-        version = tag
         notes = (try? container.decode(String.self, forKey: .notes)) ?? ""
         htmlUrl = (try? container.decode(String.self, forKey: .htmlUrl)) ?? ""
 

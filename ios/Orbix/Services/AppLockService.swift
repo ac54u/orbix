@@ -4,16 +4,14 @@ import LocalAuthentication
 @MainActor
 final class AppLockService: ObservableObject {
     static let shared = AppLockService()
-    private init() {}
 
-    @Published var isLocked = true
+    @Published var isLocked: Bool
     @Published var isEnabled: Bool {
         didSet {
             PersistenceService.shared.appLockEnabled = isEnabled
         }
     }
 
-    private var backgroundTask: UIBackgroundTaskIdentifier = .invalid
     private var enteredBackgroundAt: Date?
 
     var isDeviceSupported: Bool {
@@ -24,11 +22,10 @@ final class AppLockService: ObservableObject {
         LAContext().biometryType == .faceID
     }
 
-    init() {
-        isEnabled = PersistenceService.shared.appLockEnabled
-        if !isEnabled {
-            isLocked = false
-        }
+    private init() {
+        let enabled = PersistenceService.shared.appLockEnabled
+        isEnabled = enabled
+        isLocked = enabled
         observeLifecycle()
     }
 

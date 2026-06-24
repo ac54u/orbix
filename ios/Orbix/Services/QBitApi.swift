@@ -286,7 +286,7 @@ actor QBitApi {
     }
 
     func addTorrent(bytes: Data, filename: String, category: String? = nil, tags: String? = nil, savePath: String? = nil) async throws -> String? {
-        guard let url = apiUrl("/api/v2/torrents/add") else { throw ApiError.invalidURL }
+        let path = "/api/v2/torrents/add"
 
         let boundary = "Boundary-\(UUID().uuidString)"
         var multipartData = Data()
@@ -334,8 +334,8 @@ actor QBitApi {
 
     func getSearchStatus(id: Int) async throws -> [String: Any]? {
         let data = try await authedGetData("/api/v2/search/status?id=\(id)")
-        return try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] ?? []
-        .first
+        let json = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]]
+        return json?.first
     }
 
     func getSearchResults(id: Int, limit: Int = 50, offset: Int = 0) async throws -> [SearchResult] {

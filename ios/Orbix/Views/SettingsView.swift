@@ -95,7 +95,7 @@ struct SettingsView: View {
     }
 
     private var securitySection: some View {
-        Section("安全") {
+        Section {
             if appLock.isDeviceSupported {
                 Toggle(isOn: $appLock.isEnabled) {
                     HStack {
@@ -107,10 +107,12 @@ struct SettingsView: View {
                 }
                 .tint(AppColors.accent)
             }
+        } header: {
+            Text("安全")
         } footer: {
             if appLock.isEnabled {
                 Text("应用进入后台超过 8 秒后将自动锁定")
-                    .caption()
+                    .font(AppTypography.caption())
             }
         }
     }
