@@ -7,7 +7,12 @@ actor QBitApi {
     // MARK: - State
     private var activeServer: ServerConfig?
     private var sessionCookie: String?
-    private let session = URLSession(configuration: .ephemeral)
+    private let session: URLSession = {
+        let config = URLSessionConfiguration.ephemeral
+        config.httpCookieAcceptPolicy = .never
+        config.httpShouldSetCookies = false
+        return URLSession(configuration: config)
+    }()
     private let decoder = JSONDecoder()
 
     // MARK: - Server Management

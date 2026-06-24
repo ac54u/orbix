@@ -143,20 +143,13 @@ struct TorrentListView: View {
 
     private func refresh() {
         Task {
-            do {
-                let list = try await QBitApi.shared.getTorrents()
-                let transfer = try await QBitApi.shared.getTransferInfo()
-                await MainActor.run {
-                    torrents = list
-                    globalDlSpeed = transfer?.dlInfoSpeed ?? 0
-                    globalUpSpeed = transfer?.upInfoSpeed ?? 0
-                    isLoading = false
-                }
-            } catch {
-                await MainActor.run {
-                    isLoading = false
-                    print("API error: \(error.localizedDescription)")
-                }
+            let list = (try? await QBitApi.shared.getTorrents()) ?? []
+            let transfer = (try? await QBitApi.shared.getTransferInfo())
+            await MainActor.run {
+                torrents = list
+                globalDlSpeed = transfer?.dlInfoSpeed ?? 0
+                globalUpSpeed = transfer?.upInfoSpeed ?? 0
+                isLoading = false
             }
         }
     }
