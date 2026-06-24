@@ -66,26 +66,43 @@ private struct FeatureTile: View {
     let title: String
     let subtitle: String
 
+    @Environment(\.colorScheme) var colorScheme
+
     var body: some View {
         HStack(spacing: 16) {
-            Image(systemName: icon)
-                .font(.title3)
-                .foregroundColor(AppColors.accent)
-                .frame(width: 32)
+            ZStack {
+                Circle()
+                    .fill(AppColors.accent.opacity(0.15))
+                    .frame(width: 48, height: 48)
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .bodyFont()
-                Text(subtitle)
-                    .subtitle()
+                Image(systemName: icon)
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundColor(AppColors.accent)
             }
 
-            Spacer()
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundColor(.primary)
+
+                Text(subtitle)
+                    .font(.system(size: 14, weight: .regular))
+                    .foregroundColor(.secondary)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 0)
         }
-        .padding(16)
+        .padding(.vertical, 14)
+        .padding(.horizontal, 16)
         .background(
-            RoundedRectangle(cornerRadius: 10)
-                .fill(AppColors.card)
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(.ultraThinMaterial)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(Color.white.opacity(colorScheme == .dark ? 0.05 : 0), lineWidth: 0.5)
+                )
         )
     }
 }
