@@ -570,7 +570,6 @@ class _SearchScreenState extends State<SearchScreen> with TickerProviderStateMix
       builder: (ctx) {
         final fileName = (r['fileName'] ?? '').toString();
         final rawDesc = (r['description'] ?? '') as String?;
-        debugPrint('_showDetailSheet desc: "${rawDesc?.substring(0, rawDesc.length > 40 ? 40 : rawDesc.length)}"');
         final hasDesc = rawDesc != null && rawDesc.isNotEmpty;
         bool translationTriggered = false;
         String? localDesc;

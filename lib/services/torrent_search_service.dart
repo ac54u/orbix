@@ -139,11 +139,6 @@ class TorrentSearchService {
       r'(\d+\.?\d*\s*(?:GB|MB|TB|KB))',
       caseSensitive: false,
     );
-    final descRE = RegExp(
-      r'<p\s+class="level\s+has-text-grey-dark">\s*(.*?)\s*</p>',
-      caseSensitive: false,
-      dotAll: true,
-    );
 
     final cardMatches = cardRE.allMatches(html).toList();
     for (int i = 0; i < cardMatches.length; i++) {
@@ -172,11 +167,16 @@ class TorrentSearchService {
         final sizeM = sizeRE.firstMatch(cardHtml);
         final size = (sizeM != null) ? sizeM.group(1)!.trim() : '';
 
-        final descM = descRE.firstMatch(cardHtml);
-        final description = descM?.group(1)?.trim();
-        if (description == null || description.isEmpty) {
-          debugPrint('141ppv desc MISSING for $code');
-          debugPrint('  cardHtml snippet: ${cardHtml.substring(0, cardHtml.length > 300 ? 300 : cardHtml.length)}');
+        // Extract description using string methods for maximum compatibility
+        String? description;
+        const descMarker = 'level has-text-grey-dark">';
+        final descPos = cardHtml.indexOf(descMarker);
+        if (descPos >= 0) {
+          final textStart = descPos + descMarker.length;
+          final closeP = cardHtml.indexOf('</p>', textStart);
+          if (closeP > textStart) {
+            description = cardHtml.substring(textStart, closeP).trim();
+          }
         }
 
         items.add(ScrapedTorrent(
