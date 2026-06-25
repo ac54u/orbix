@@ -11,12 +11,12 @@ struct TorrentDetailView: View {
     @State private var isLoading = true
     @State private var processingAction: ActionType? = nil
     @State private var lastAnnounceAt: Date? = nil
+    @State private var loadError: String? = nil
+    @State private var announceCooldown = false
 
     enum ActionType {
         case pause, force, recheck, announce
     }
-
-    private let timer = Timer.publish(every: 2, on: .main, in: .common).autoconnect()
 
     var body: some View {
         ZStack {
@@ -29,6 +29,8 @@ struct TorrentDetailView: View {
                     SkeletonBar(height: 200)
                 }
                 .padding(20)
+            } else if let err = loadError {
+                errorStateView(err)
             } else if let torrent = torrent {
                 ScrollView {
                     VStack(spacing: 20) {
@@ -82,8 +84,7 @@ struct TorrentDetailView: View {
         } message: {
             Text("确定要删除此种子吗？")
         }
-        .onAppear { refresh() }
-        .onReceive(timer) { _ in refresh() }
+        .task { await autoRefreshLoop() }
     }
 
     @ViewBuilder
@@ -176,10 +177,10 @@ struct TorrentDetailView: View {
                 action: { performAction(.recheck, torrent: torrent) }
             )
             ActionTile(
-                icon: "antenna.radiowaves.left.and.right",
-                label: "汇报",
-                color: AppColors.accent,
-                isLoading: processingAction == .announce,
+                icon: announceCooldown ? "clock.fill" : "antenna.radiowaves.left.and.right",
+                label: announceCooldown ? "请稍候" : "汇报",
+                color: announceCooldown ? AppColors.secondaryLabel : AppColors.accent,
+                isLoading: processingAction == .announce || announceCooldown,
                 action: { performAction(.announce, torrent: torrent) }
             )
         }
@@ -359,8 +360,36 @@ struct TorrentDetailView: View {
         }
         .padding()
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(AppColors.danger.opacity(0.1))
-        .cornerRadius(12)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(AppColors.danger.opacity(0.1))
+        )
+    }
+
+    @ViewBuilder
+    private func errorStateView(_ message: String) -> some View {
+        VStack(spacing: 16) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 48))
+                .foregroundColor(AppColors.danger)
+
+            Text("加载失败")
+                .font(.headline)
+                .foregroundColor(AppColors.label)
+
+            Text(message)
+                .font(.subheadline)
+                .foregroundColor(AppColors.secondaryLabel)
+                .multilineTextAlignment(.center)
+
+            Button("重试") {
+                loadError = nil
+                isLoading = true
+                Task { await refresh() }
+            }
+            .buttonStyle(.borderedProminent)
+        }
+        .padding(40)
     }
 
     private func statusColor(_ torrent: TorrentInfo) -> Color {
@@ -378,21 +407,37 @@ struct TorrentDetailView: View {
         return torrent.isCompleted ? AppColors.success : AppColors.accent
     }
 
-    private func refresh() {
-        Task {
-            do {
-                let t = try await QBitApi.shared.getTorrentByHash(hash)
-                let p = try await QBitApi.shared.getProperties(hash)
-                let f = try await QBitApi.shared.getTorrentFiles(hash)
-                await MainActor.run {
-                    torrent = t
-                    properties = p
-                    files = f
-                    isLoading = false
-                }
-            } catch {
-                await MainActor.run { isLoading = false }
+    private func refresh() async {
+        do {
+            let t = try await QBitApi.shared.getTorrentByHash(hash)
+            let p = try await QBitApi.shared.getProperties(hash)
+            let f = try await QBitApi.shared.getTorrentFiles(hash)
+            try Task.checkCancellation()
+            await MainActor.run {
+                torrent = t
+                properties = p
+                files = f
+                isLoading = false
+                loadError = nil
             }
+        } catch is CancellationError {
+            // Task cancelled, exit silently
+        } catch {
+            await MainActor.run {
+                isLoading = false
+                if torrent == nil {
+                    loadError = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    private func autoRefreshLoop() async {
+        await refresh()
+        while !Task.isCancelled {
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            guard !Task.isCancelled else { break }
+            await refresh()
         }
     }
 
@@ -404,16 +449,14 @@ struct TorrentDetailView: View {
             if let t = t { torrent = t }
             if let p = p { properties = p }
             if let f = f { files = f }
+            if t != nil { loadError = nil }
         }
     }
 
     private func performAction(_ type: ActionType, torrent: TorrentInfo) {
         guard processingAction == nil else { return }
 
-        // Announce cooldown: prevent hammering the tracker
-        if type == .announce, let last = lastAnnounceAt, Date().timeIntervalSince(last) < 2.0 {
-            return
-        }
+        if type == .announce, announceCooldown { return }
 
         processingAction = type
         let oldState = torrent.state
@@ -436,7 +479,12 @@ struct TorrentDetailView: View {
                     try await QBitApi.shared.recheckTorrent(hash)
                 case .announce:
                     try await QBitApi.shared.reannounceTorrent(hash)
-                    await MainActor.run { lastAnnounceAt = Date() }
+                    lastAnnounceAt = Date()
+                    announceCooldown = true
+                    Task { @MainActor in
+                        try? await Task.sleep(nanoseconds: 2_000_000_000)
+                        announceCooldown = false
+                    }
                 }
 
                 let generator = UINotificationFeedbackGenerator()
@@ -448,7 +496,11 @@ struct TorrentDetailView: View {
                 var attempt = 0
 
                 while attempt < 6 {
-                    try? await Task.sleep(nanoseconds: interval)
+                    do {
+                        try await Task.sleep(nanoseconds: interval)
+                    } catch {
+                        break
+                    }
                     attempt += 1
 
                     if let newTorrent = try? await QBitApi.shared.getTorrentByHash(hash) {
