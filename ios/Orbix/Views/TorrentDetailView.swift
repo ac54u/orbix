@@ -7,6 +7,8 @@ struct TorrentDetailView: View {
     @State private var torrent: TorrentInfo?
     @State private var properties: TorrentProperties?
     @State private var files: [TorrentFile] = []
+    @State private var trackers: [TorrentTracker] = []
+    @State private var peers: [TorrentPeer] = []
     @State private var showDeleteConfirmation = false
     @State private var isLoading = true
     @State private var processingAction: ActionType? = nil
@@ -46,11 +48,20 @@ struct TorrentDetailView: View {
                             transferSection(torrent)
                             if let props = properties {
                                 infoSection(props)
+                                timeSection(props)
                             }
                         }
 
                         if !files.isEmpty {
                             filesSection
+                        }
+
+                        if !trackers.isEmpty {
+                            trackersSection
+                        }
+
+                        if !peers.isEmpty {
+                            peersSection
                         }
                     }
                     .padding(.horizontal, 16)
@@ -336,6 +347,111 @@ struct TorrentDetailView: View {
     }
 
     private func iconForFile(filename: String) -> String {
+
+    // MARK: - Time Section
+    private func timeSection(_ props: TorrentProperties) -> some View {
+        VStack(spacing: 0) {
+            SectionHeader(title: "时间")
+            VStack(spacing: 0) {
+                DetailRow(icon: "calendar.badge.plus", iconColor: AppColors.secondaryLabel, label: "添加时间", value: formatUnixTime(props.addedOn))
+                if props.completionOn > 0 {
+                    Divider().padding(.leading, 44)
+                    DetailRow(icon: "checkmark.seal.fill", iconColor: AppColors.success, label: "完成时间", value: formatUnixTime(props.completionOn))
+                }
+            }
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(AppColors.card)
+            )
+        }
+    }
+
+    // MARK: - Trackers Section
+    private var trackersSection: some View {
+        VStack(spacing: 0) {
+            SectionHeader(title: "Trackers (\(trackers.count))")
+            VStack(spacing: 0) {
+                ForEach(trackers.indices, id: \.self) { index in
+                    let tracker = trackers[index]
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(spacing: 8) {
+                            Circle()
+                                .fill(trackerStatusColor(tracker.status))
+                                .frame(width: 8, height: 8)
+                            Text(tracker.statusText)
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundColor(trackerStatusColor(tracker.status))
+                            Spacer()
+                        }
+                        Text("种子：\(tracker.numSeeds) • 下载：\(tracker.numLeeches)")
+                            .font(.system(size: 12))
+                            .foregroundColor(AppColors.tertiaryLabel)
+                        Text(tracker.url)
+                            .font(.system(size: 12, design: .monospaced))
+                            .foregroundColor(AppColors.secondaryLabel)
+                            .lineLimit(2)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                    if index < trackers.count - 1 {
+                        Divider().padding(.leading, 16)
+                    }
+                }
+            }
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(AppColors.card)
+            )
+        }
+    }
+
+    // MARK: - Peers Section
+    private var peersSection: some View {
+        VStack(spacing: 0) {
+            SectionHeader(title: "Peers (\(peers.count))")
+            VStack(spacing: 0) {
+                ForEach(peers.indices, id: \.self) { index in
+                    let peer = peers[index]
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text("\(peer.ip):\(peer.port)")
+                                .font(.system(size: 13, weight: .medium, design: .monospaced))
+                                .foregroundColor(AppColors.label)
+                            Spacer()
+                            Text("\(peer.progressPercent)%")
+                                .font(.system(size: 12, design: .monospaced))
+                                .foregroundColor(AppColors.secondaryLabel)
+                        }
+                        if !peer.country.isEmpty {
+                            Text(peer.country)
+                                .font(.system(size: 12))
+                                .foregroundColor(AppColors.tertiaryLabel)
+                        }
+                        if !peer.client.isEmpty {
+                            Text(peer.client)
+                                .font(.system(size: 11, design: .monospaced))
+                                .foregroundColor(AppColors.tertiaryLabel.opacity(0.7))
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                    if index < peers.count - 1 {
+                        Divider().padding(.leading, 16)
+                    }
+                }
+            }
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(AppColors.card)
+            )
+        }
+    }
+
+    private func iconForFile(filename: String) -> String {
         let ext = (filename as NSString).pathExtension.lowercased()
         switch ext {
         case "mp4", "mkv", "avi", "mov", "wmv", "flv", "webm", "ts": return "film.fill"
@@ -409,14 +525,19 @@ struct TorrentDetailView: View {
 
     private func refresh() async {
         do {
-            let t = try await QBitApi.shared.getTorrentByHash(hash)
-            let p = try await QBitApi.shared.getProperties(hash)
-            let f = try await QBitApi.shared.getTorrentFiles(hash)
+            async let t = QBitApi.shared.getTorrentByHash(hash)
+            async let p = QBitApi.shared.getProperties(hash)
+            async let f = QBitApi.shared.getTorrentFiles(hash)
+            async let tr = QBitApi.shared.getTorrentTrackers(hash)
+            async let pe = QBitApi.shared.getTorrentPeers(hash)
+            let (torrent, properties, files, trackers, peers) = try await (t, p, f, tr, pe)
             try Task.checkCancellation()
             await MainActor.run {
-                torrent = t
-                properties = p
-                files = f
+                self.torrent = torrent
+                self.properties = properties
+                self.files = files
+                self.trackers = trackers
+                self.peers = peers
                 isLoading = false
                 loadError = nil
             }
@@ -442,14 +563,19 @@ struct TorrentDetailView: View {
     }
 
     @Sendable private func manualRefresh() async {
-        let t = try? await QBitApi.shared.getTorrentByHash(hash)
-        let p = try? await QBitApi.shared.getProperties(hash)
-        let f = try? await QBitApi.shared.getTorrentFiles(hash)
+        async let t = QBitApi.shared.getTorrentByHash(hash)
+        async let p = QBitApi.shared.getProperties(hash)
+        async let f = QBitApi.shared.getTorrentFiles(hash)
+        async let tr = QBitApi.shared.getTorrentTrackers(hash)
+        async let pe = QBitApi.shared.getTorrentPeers(hash)
+        let (torrent, properties, files, trackers, peers) = try? await (t, p, f, tr, pe) ?? (nil, nil, [], [], [])
         await MainActor.run {
-            if let t = t { torrent = t }
-            if let p = p { properties = p }
-            if let f = f { files = f }
-            if t != nil { loadError = nil }
+            if let t = torrent { self.torrent = t }
+            if let p = properties { self.properties = p }
+            if !files.isEmpty { self.files = files }
+            if !trackers.isEmpty { self.trackers = trackers }
+            if !peers.isEmpty { self.peers = peers }
+            if torrent != nil { self.trackers = trackers; self.peers = peers; loadError = nil }
         }
     }
 
@@ -518,12 +644,16 @@ struct TorrentDetailView: View {
                     interval = min(maxInterval, interval * 13 / 8)
                 }
 
-                // Final sync for properties & files
+                // Final sync for properties, files, trackers, peers
                 let p = try? await QBitApi.shared.getProperties(hash)
                 let f = try? await QBitApi.shared.getTorrentFiles(hash)
+                let tr = try? await QBitApi.shared.getTorrentTrackers(hash)
+                let pe = try? await QBitApi.shared.getTorrentPeers(hash)
                 await MainActor.run {
                     if let p = p { properties = p }
                     if let f = f { files = f }
+                    if let tr = tr { trackers = tr }
+                    if let pe = pe { peers = pe }
                 }
 
             } catch {
@@ -542,6 +672,24 @@ struct TorrentDetailView: View {
             try? await QBitApi.shared.deleteTorrent(hash, deleteFiles: deleteFiles)
             dismiss()
         }
+    }
+
+    private func trackerStatusColor(_ status: Int) -> Color {
+        switch status {
+        case 0, 1: return AppColors.danger
+        case 2, 4: return AppColors.success
+        case 3: return AppColors.warning
+        default: return AppColors.secondaryLabel
+        }
+    }
+
+    private func formatUnixTime(_ timestamp: Int64) -> String {
+        guard timestamp > 0 else { return "-" }
+        let date = Date(timeIntervalSince1970: TimeInterval(timestamp))
+        let fmt = DateFormatter()
+        fmt.locale = Locale(identifier: "zh_CN")
+        fmt.dateFormat = "yyyy年M月d日 HH:mm"
+        return fmt.string(from: date)
     }
 }
 

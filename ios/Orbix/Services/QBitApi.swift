@@ -240,6 +240,16 @@ actor QBitApi {
         return (try? decoder.decode([TorrentFile].self, from: data)) ?? []
     }
 
+    func getTorrentTrackers(_ hash: String) async throws -> [TorrentTracker] {
+        let data = try await authedGetData("/api/v2/torrents/trackers?hash=\(hash)")
+        return (try? decoder.decode([TorrentTracker].self, from: data)) ?? []
+    }
+
+    func getTorrentPeers(_ hash: String) async throws -> [TorrentPeer] {
+        let data = try await authedGetData("/api/v2/torrents/peers?hash=\(hash)")
+        return (try? decoder.decode([TorrentPeer].self, from: data)) ?? []
+    }
+
     // MARK: - Torrent Actions
     func startTorrent(_ hash: String) async throws {
         let _ = try await authedPost("/api/v2/torrents/start", body: ["hashes": hash])

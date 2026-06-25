@@ -251,6 +251,62 @@ struct TorrentFile: Codable, Identifiable {
     var progressPercent: Int { Int(progress * 100) }
 }
 
+struct TorrentTracker: Codable, Identifiable {
+    var id: String { url }
+    let url: String
+    let status: Int
+    let tier: Int
+    let numPeers: Int
+    let numSeeds: Int
+    let numLeeches: Int
+    let numDownloaded: Int
+    let msg: String
+
+    enum CodingKeys: String, CodingKey {
+        case url, status, tier
+        case numPeers = "num_peers"
+        case numSeeds = "num_seeds"
+        case numLeeches = "num_leeches"
+        case numDownloaded = "num_downloaded"
+        case msg
+    }
+
+    var statusText: String {
+        switch status {
+        case 0: return "已禁用"
+        case 1: return "未联系"
+        case 2: return "工作中"
+        case 3: return "更新中"
+        case 4: return "工作中"
+        default: return msg.isEmpty ? "未知" : msg
+        }
+    }
+}
+
+struct TorrentPeer: Codable, Identifiable {
+    var id: String { "\(ip):\(port)" }
+    let ip: String
+    let port: Int
+    let country: String
+    let countryCode: String
+    let progress: Double
+    let dlSpeed: Int64
+    let upSpeed: Int64
+    let connection: String
+    let flags: String
+    let client: String
+
+    enum CodingKeys: String, CodingKey {
+        case ip, port, country
+        case countryCode = "country_code"
+        case progress, connection, flags, client
+        case dlSpeed = "dl_speed"
+        case upSpeed = "up_speed"
+    }
+
+    var progressPercent: Int { Int(progress * 100) }
+}
+
 struct SyncMainData: Codable {
     let torrents: [String: TorrentInfo]?
     let serverState: ServerState?
