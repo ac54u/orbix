@@ -199,11 +199,11 @@ struct SearchView: View {
         Task {
             state = .loading
             do {
-                let items = try await TorrentSearchService.shared.trending(pages: 2)
+                let items = try await TorrentSearchService.shared.trending(pages: 6)
                 await MainActor.run {
                     allResults = items
                     results = items
-                    lastPage = 2
+                    lastPage = 6
                     state = items.isEmpty ? .idle : .results
                 }
             } catch {
