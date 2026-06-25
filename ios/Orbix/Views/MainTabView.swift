@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct MainTabView: View {
+    let initialTab: Int?
     let onLogout: () -> Void
 
     @State private var selectedTab = 0
@@ -36,5 +37,10 @@ struct MainTabView: View {
                 .tag(3)
         }
         .tint(AppColors.accent)
+        .onAppear {
+            if let tab = initialTab {
+                selectedTab = tab
+            }
+        }
     }
 }

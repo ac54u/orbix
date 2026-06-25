@@ -3,6 +3,7 @@ import SwiftUI
 struct ContentView: View {
     @State private var destination: Destination = .splash
     @State private var showLoginFromWelcome = false
+    @State private var deepLinkTab: Int?
 
     enum Destination {
         case splash
@@ -45,7 +46,8 @@ struct ContentView: View {
                     }
                 })
             case .main:
-                MainTabView(onLogout: {
+                MainTabView(initialTab: deepLinkTab, onLogout: {
+                    deepLinkTab = nil
                     withAnimation(.smooth(duration: 0.35)) {
                         destination = .serverSelection
                     }
@@ -53,5 +55,11 @@ struct ContentView: View {
             }
         }
         .animation(.smooth(duration: 0.35), value: destination)
+        .onOpenURL { _ in
+            deepLinkTab = 2
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .openSearch)) { _ in
+            deepLinkTab = 2
+        }
     }
 }

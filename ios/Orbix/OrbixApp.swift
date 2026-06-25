@@ -1,5 +1,9 @@
 import SwiftUI
 
+extension Notification.Name {
+    static let openSearch = Notification.Name("com.orbix.openSearch")
+}
+
 @main
 struct OrbixApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
@@ -26,5 +30,16 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
                              diskPath: "orbix_image_cache")
         URLCache.shared = cache
         return true
+    }
+
+    func application(
+        _ application: UIApplication,
+        performActionFor shortcutItem: UIApplicationShortcutItem,
+        completionHandler: @escaping (Bool) -> Void
+    ) {
+        if shortcutItem.type == "com.orbix.search" {
+            NotificationCenter.default.post(name: .openSearch, object: nil)
+        }
+        completionHandler(true)
     }
 }
