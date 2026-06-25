@@ -17,6 +17,31 @@ struct SearchView: View {
 
     @State private var searchTask: Task<Void, Never>?
 
+    // MARK: - Grid Layout (pinch to zoom)
+    @AppStorage("searchGridColumns") private var gridColumnCount = 2
+    @State private var pinchBaseColumns: Int?
+
+    private var gridColumns: [GridItem] {
+        Array(repeating: GridItem(.flexible(), spacing: 10), count: gridColumnCount)
+    }
+
+    private var pinchToZoom: some Gesture {
+        MagnificationGesture()
+            .onChanged { scale in
+                let base = pinchBaseColumns ?? gridColumnCount
+                if pinchBaseColumns == nil { pinchBaseColumns = gridColumnCount }
+                // 往外撑(scale>1) → 列变少卡片变大；往里捏 → 列变多
+                let steps = Int((scale - 1) * 3)
+                let target = min(6, max(2, base - steps))
+                if target != gridColumnCount {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                        gridColumnCount = target
+                    }
+                }
+            }
+            .onEnded { _ in pinchBaseColumns = nil }
+    }
+
     var body: some View {
         NavigationStack {
             ZStack {
@@ -104,7 +129,7 @@ struct SearchView: View {
                 if results.isEmpty {
                     gridSkeleton
                 } else {
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 160, maximum: 170), spacing: 10)], spacing: 10) {
+                    LazyVGrid(columns: gridColumns, spacing: 10) {
                         ForEach(results) { torrent in
                             TorrentCard(torrent: torrent, isBookmarked: bookmarks.contains(torrent.code))
                                 .onTapGesture { selectedTorrent = torrent }
@@ -116,6 +141,7 @@ struct SearchView: View {
             }
         }
         .refreshable { await refreshSearch() }
+        .gesture(pinchToZoom)
     }
 
     // MARK: - Loading
@@ -133,7 +159,7 @@ struct SearchView: View {
     // MARK: - Results
     private var resultsView: some View {
         ScrollView {
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 160, maximum: 170), spacing: 10)], spacing: 10) {
+            LazyVGrid(columns: gridColumns, spacing: 10) {
                 ForEach(results) { torrent in
                     TorrentCard(torrent: torrent, isBookmarked: bookmarks.contains(torrent.code))
                         .onTapGesture { selectedTorrent = torrent }
@@ -155,6 +181,7 @@ struct SearchView: View {
             }
         }
         .refreshable { await refreshSearch() }
+        .gesture(pinchToZoom)
     }
 
     // MARK: - Context Menu
@@ -255,7 +282,7 @@ struct SearchView: View {
     }
 
     private var gridSkeleton: some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 160, maximum: 170), spacing: 10)], spacing: 10) {
+        LazyVGrid(columns: gridColumns, spacing: 10) {
             ForEach(0..<6, id: \.self) { _ in
                 RoundedRectangle(cornerRadius: 10).fill(AppColors.card).aspectRatio(0.72, contentMode: .fit)
             }
