@@ -286,9 +286,15 @@ struct SearchView: View {
                     if items.isEmpty {
                         hasMorePages = false
                     } else {
-                        allResults.append(contentsOf: items)
-                        results.append(contentsOf: items)
-                        currentPage = nextPage
+                        let existingCodes = Set(results.map(\.code))
+                        let newItems = items.filter { !existingCodes.contains($0.code) }
+                        if newItems.isEmpty {
+                            hasMorePages = false
+                        } else {
+                            allResults.append(contentsOf: newItems)
+                            results.append(contentsOf: newItems)
+                            currentPage = nextPage
+                        }
                     }
                     isLoadingMore = false
                 }
@@ -355,17 +361,17 @@ private struct TorrentCard: View {
                 }
             }
 
-            // Size badge at bottom-right
+            // Size badge — Swiftgram Pro style pill at bottom-right
             Text(torrent.size)
-                .font(.system(size: 10, weight: .regular))
+                .font(.system(size: 11, weight: .semibold))
                 .foregroundColor(.white)
-                .padding(.horizontal, 5)
-                .padding(.vertical, 2)
-                .background(.black.opacity(0.5), in: RoundedRectangle(cornerRadius: 2))
-                .padding(4)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 3)
+                .background(Capsule().fill(.black.opacity(0.5)))
+                .padding([.bottom, .trailing], 3)
         }
         .aspectRatio(1, contentMode: .fit)
-        .clipShape(RoundedRectangle(cornerRadius: 1))
+        .clipped()
     }
 }
 
