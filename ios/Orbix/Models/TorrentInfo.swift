@@ -106,6 +106,9 @@ enum TorrentStatus: String {
     case checkingUP = "checkingUP"
     case checkingResumeData = "checkingResumeData"
     case moving = "moving"
+    case forcedUP = "forcedUP"
+    case forcedDL = "forcedDL"
+    case allocating = "allocating"
     case error = "error"
     case missingFiles = "missingFiles"
     case metaDL = "metaDL"
@@ -115,7 +118,7 @@ enum TorrentStatus: String {
         switch self {
         case .downloading, .uploading, .stalledDL, .stalledUP,
                 .checkingDL, .checkingUP, .checkingResumeData,
-                .moving, .metaDL:
+                .moving, .metaDL, .forcedUP, .forcedDL, .allocating:
             true
         default:
             false
@@ -142,6 +145,9 @@ enum TorrentStatus: String {
         case .queuedUP: "Queued (UP)"
         case .checkingDL, .checkingUP, .checkingResumeData: "Checking"
         case .moving: "Moving"
+        case .forcedUP: "Forced (UP)"
+        case .forcedDL: "Forced (DL)"
+        case .allocating: "Allocating"
         case .error: "Error"
         case .missingFiles: "Missing Files"
         case .metaDL: "Fetching Metadata"
