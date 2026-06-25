@@ -249,7 +249,7 @@ private struct SwipeableTorrentCard: View {
             .offset(x: offset)
         }
         .simultaneousGesture(
-            DragGesture(minimumDistance: 0)
+            DragGesture(minimumDistance: 10)
                 .onChanged { value in
                     guard !isDeleting else { return }
                     if value.translation.width < 0 && abs(value.translation.width) > abs(value.translation.height) {
@@ -258,6 +258,10 @@ private struct SwipeableTorrentCard: View {
                 }
                 .onEnded { value in
                     guard !isDeleting else { return }
+                    guard abs(value.translation.width) > abs(value.translation.height) else {
+                        offset = 0
+                        return
+                    }
                     withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                         if value.translation.width < -80 || value.predictedEndTranslation.width < -150 {
                             offset = -UIScreen.main.bounds.width
