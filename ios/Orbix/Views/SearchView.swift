@@ -13,6 +13,7 @@ struct SearchView: View {
     @State private var mediaViewerIndex = 0
     @State private var currentPage = 1
     @State private var hasMorePages = true
+    @State private var hasScrolled = false
 
     enum SearchState { case idle, loading, results, empty, error(String) }
 
@@ -204,7 +205,7 @@ struct SearchView: View {
                         } else if hasMorePages {
                             Color.clear
                                 .frame(height: 1)
-                                .onAppear { loadMore() }
+                                .onAppear { if hasScrolled { loadMore() } }
                         } else {
                             Text("— 已加载全部 —")
                                 .font(.caption)
@@ -216,6 +217,10 @@ struct SearchView: View {
             }
         }
         .refreshable { await refreshSearch() }
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 5)
+                .onChanged { _ in if !hasScrolled { hasScrolled = true } }
+        )
         .gesture(pinchToZoom)
     }
 
