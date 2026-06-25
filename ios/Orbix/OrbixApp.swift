@@ -21,6 +21,8 @@ struct OrbixApp: App {
 }
 
 final class AppDelegate: NSObject, UIApplicationDelegate {
+    static var pendingShortcut: String?
+
     func application(
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
@@ -38,6 +40,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         completionHandler: @escaping (Bool) -> Void
     ) {
         if shortcutItem.type == "com.orbix.search" {
+            AppDelegate.pendingShortcut = "search"
             NotificationCenter.default.post(name: .openSearch, object: nil)
         }
         completionHandler(true)

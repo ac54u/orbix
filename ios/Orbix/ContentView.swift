@@ -61,5 +61,11 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: .openSearch)) { _ in
             deepLinkTab = 2
         }
+        .onAppear {
+            if AppDelegate.pendingShortcut == "search" {
+                AppDelegate.pendingShortcut = nil
+                deepLinkTab = 2
+            }
+        }
     }
 }
