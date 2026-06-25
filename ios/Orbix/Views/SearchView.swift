@@ -157,32 +157,62 @@ struct SearchView: View {
     }
 
     // MARK: - Results
+    private var sections: [(date: String, items: [ScrapedTorrent])] {
+        var dict = [String: [ScrapedTorrent]]()
+        var order: [String] = []
+        for item in results {
+            if dict[item.date] == nil { order.append(item.date) }
+            dict[item.date, default: []].append(item)
+        }
+        return order.map { (date: $0, items: dict[$0]!) }
+    }
+
     private var resultsView: some View {
         ScrollView {
-            LazyVGrid(columns: gridColumns, spacing: 1) {
-                ForEach(results) { torrent in
-                    TorrentCard(torrent: torrent)
-                        .onTapGesture { selectedTorrent = torrent }
-                        .contextMenu { cardContextMenu(torrent) }
-                }
-            }
-            .padding(.top, 1)
-
-            if !results.isEmpty {
-                VStack(spacing: 4) {
-                    if isLoadingMore {
-                        ProgressView().tint(AppColors.accent)
-                    } else if hasMorePages {
-                        Color.clear
-                            .frame(height: 1)
-                            .onAppear { loadMore() }
-                    } else {
-                        Text("— 已加载全部 —")
-                            .font(.caption)
-                            .foregroundColor(AppColors.tertiaryLabel)
+            LazyVStack(spacing: 0, pinnedViews: .sectionHeaders) {
+                ForEach(sections, id: \.date) { section in
+                    Section {
+                        LazyVGrid(columns: gridColumns, spacing: 1) {
+                            ForEach(section.items) { torrent in
+                                TorrentCard(torrent: torrent)
+                                    .onTapGesture { selectedTorrent = torrent }
+                                    .contextMenu { cardContextMenu(torrent) }
+                            }
+                        }
+                        .padding(.top, 1)
+                    } header: {
+                        HStack {
+                            Spacer()
+                            Text(section.date)
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 3)
+                                .background(Capsule().fill(.black.opacity(0.5)))
+                                .padding(.trailing, 4)
+                                .padding(.top, 4)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .background(.clear)
                     }
                 }
-                .padding(.vertical, 20)
+
+                if !results.isEmpty {
+                    VStack(spacing: 4) {
+                        if isLoadingMore {
+                            ProgressView().tint(AppColors.accent)
+                        } else if hasMorePages {
+                            Color.clear
+                                .frame(height: 1)
+                                .onAppear { loadMore() }
+                        } else {
+                            Text("— 已加载全部 —")
+                                .font(.caption)
+                                .foregroundColor(AppColors.tertiaryLabel)
+                        }
+                    }
+                    .padding(.vertical, 20)
+                }
             }
         }
         .refreshable { await refreshSearch() }
@@ -359,18 +389,6 @@ private struct TorrentCard: View {
                 @unknown default:
                     AppColors.card
                 }
-            }
-
-            // Date badge at top-right — Swiftgram Pro style
-            if !torrent.date.isEmpty {
-                Text(torrent.date)
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 5)
-                    .padding(.vertical, 2)
-                    .background(Capsule().fill(.black.opacity(0.5)))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-                    .padding(3)
             }
 
             // Size badge — Swiftgram Pro style pill at bottom-right
