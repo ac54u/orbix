@@ -134,9 +134,11 @@ struct SearchView: View {
     }
 
     private var currentVisibleDate: String? {
-        guard let id = visibleItemID,
-              let item = sortedResults.first(where: { $0.id == id }) else { return nil }
-        return item.date
+        if let id = visibleItemID,
+           let item = sortedResults.first(where: { $0.id == id }) {
+            return item.date
+        }
+        return sortedResults.first?.date
     }
 
     private var resultsView: some View {
@@ -148,6 +150,7 @@ struct SearchView: View {
                         .contextMenu { cardContextMenu(torrent) }
                 }
             }
+            .scrollTargetLayout()
             .padding(.top, 1)
 
             if !results.isEmpty {
@@ -371,24 +374,26 @@ struct SearchView: View {
 // MARK: - Torrent Card (square photo wall style)
 private struct TorrentCard: View {
     let torrent: ScrapedTorrent
+    @State private var loadedImage: UIImage?
+
+    private var thumbnailURL: URL? {
+        guard let url = torrent.thumbnail else { return nil }
+        return URL(string: url)
+    }
 
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
-            AsyncImage(url: URL(string: torrent.thumbnail ?? "")) { phase in
-                switch phase {
-                case .success(let img):
-                    img.resizable()
-                        .aspectRatio(contentMode: .fill)
-                        .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
-                case .failure, .empty:
-                    ZStack {
-                        Color(uiColor: .secondarySystemBackground)
-                        Image(systemName: "photo")
-                            .font(.system(size: 20))
-                            .foregroundColor(.gray.opacity(0.3))
-                    }
-                @unknown default:
+            if let img = loadedImage {
+                Image(uiImage: img)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
+            } else {
+                ZStack {
                     Color(uiColor: .secondarySystemBackground)
+                    Image(systemName: "photo")
+                        .font(.system(size: 20))
+                        .foregroundColor(.gray.opacity(0.3))
                 }
             }
 
@@ -405,6 +410,25 @@ private struct TorrentCard: View {
         }
         .aspectRatio(1, contentMode: .fit)
         .clipped()
+        .task(id: torrent.id) {
+            guard let url = thumbnailURL else {
+                loadedImage = nil
+                return
+            }
+            if let cached = ImageCache.shared.get(url.absoluteString) {
+                loadedImage = cached
+                return
+            }
+            do {
+                let (data, _) = try await URLSession.shared.data(from: url)
+                if let img = UIImage(data: data) {
+                    ImageCache.shared.set(url.absoluteString, image: img)
+                    loadedImage = img
+                }
+            } catch {
+                // keep placeholder
+            }
+        }
     }
 }
 

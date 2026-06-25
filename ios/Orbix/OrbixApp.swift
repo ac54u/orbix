@@ -21,6 +21,10 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
-        true
+        let cache = URLCache(memoryCapacity: 100 * 1024 * 1024,
+                             diskCapacity: 500 * 1024 * 1024,
+                             diskPath: "orbix_image_cache")
+        URLCache.shared = cache
+        return true
     }
 }
