@@ -11,7 +11,8 @@ struct SearchView: View {
     @State private var selectedTorrent: ScrapedTorrent?
     @State private var showMediaViewer = false
     @State private var mediaViewerIndex = 0
-    @State private var lastPage = 1
+    @State private var currentPage = 1
+    @State private var hasMorePages = true
 
     enum SearchState { case idle, loading, results, empty, error(String) }
 
@@ -171,8 +172,14 @@ struct SearchView: View {
                 VStack(spacing: 4) {
                     if isLoadingMore {
                         ProgressView().tint(AppColors.accent)
-                    } else if results.count >= 20 {
-                        Text("上滑加载更多").font(.caption).foregroundColor(AppColors.tertiaryLabel)
+                    } else if hasMorePages {
+                        Color.clear
+                            .frame(height: 1)
+                            .onAppear { loadMore() }
+                    } else {
+                        Text("— 已加载全部 —")
+                            .font(.caption)
+                            .foregroundColor(AppColors.tertiaryLabel)
                     }
                 }
                 .padding(.vertical, 20)
@@ -198,12 +205,13 @@ struct SearchView: View {
     private func loadLatest() {
         Task {
             state = .loading
+            currentPage = 1
+            hasMorePages = true
             do {
-                let items = try await TorrentSearchService.shared.trending(pages: 6)
+                let items = try await TorrentSearchService.shared.search(query: "a", pages: 1, startPage: 1)
                 await MainActor.run {
                     allResults = items
                     results = items
-                    lastPage = 6
                     state = items.isEmpty ? .idle : .results
                 }
             } catch {
@@ -224,13 +232,13 @@ struct SearchView: View {
         let q = query.trimmingCharacters(in: .whitespaces)
         if q.isEmpty { await MainActor.run { state = .idle }; return }
 
-        await MainActor.run { state = .loading }
+        await MainActor.run { state = .loading; hasMorePages = true }
         do {
-            let items = try await TorrentSearchService.shared.search(query: q, pages: 5)
+            let items = try await TorrentSearchService.shared.search(query: q, pages: 3, startPage: 1)
             await MainActor.run {
                 allResults = items
                 results = items
-                lastPage = 5
+                currentPage = 3
                 state = items.isEmpty ? .empty : .results
             }
         } catch {
@@ -240,16 +248,49 @@ struct SearchView: View {
 
     @Sendable private func refreshSearch() async {
         let q = query.trimmingCharacters(in: .whitespaces)
-        if q.isEmpty { return }
         do {
-            let items = try await TorrentSearchService.shared.search(query: q, pages: 3)
+            let items: [ScrapedTorrent]
+            let page: Int
+            if q.isEmpty {
+                items = try await TorrentSearchService.shared.search(query: "a", pages: 1, startPage: 1)
+                page = 1
+            } else {
+                items = try await TorrentSearchService.shared.search(query: q, pages: 3, startPage: 1)
+                page = 3
+            }
             await MainActor.run {
                 allResults = items
                 results = items
-                lastPage = 3
+                currentPage = page
+                hasMorePages = true
                 state = items.isEmpty ? .empty : .results
             }
         } catch {}
+    }
+
+    private func loadMore() {
+        guard !isLoadingMore, hasMorePages else { return }
+        isLoadingMore = true
+        let q = query.trimmingCharacters(in: .whitespaces)
+        let searchQuery = q.isEmpty ? "a" : q
+        let nextPage = currentPage + 1
+        Task {
+            do {
+                let items = try await TorrentSearchService.shared.search(query: searchQuery, pages: 1, startPage: nextPage)
+                await MainActor.run {
+                    if items.isEmpty {
+                        hasMorePages = false
+                    } else {
+                        allResults.append(contentsOf: items)
+                        results.append(contentsOf: items)
+                        currentPage = nextPage
+                    }
+                    isLoadingMore = false
+                }
+            } catch {
+                await MainActor.run { isLoadingMore = false }
+            }
+        }
     }
 
     private func addMagnet(_ torrent: ScrapedTorrent) {
