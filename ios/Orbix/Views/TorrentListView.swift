@@ -401,6 +401,15 @@ private struct TorrentRow: View {
                             .font(.system(size: 12, design: .monospaced))
                             .foregroundColor(AppColors.success)
                     }
+
+                    if torrent.ratio > 0 {
+                        Text("•")
+                            .foregroundColor(AppColors.tertiaryLabel)
+                            .font(.system(size: 10))
+                        Text(String(format: "%.2f", torrent.ratio))
+                            .font(.system(size: 12, weight: .medium, design: .monospaced))
+                            .foregroundColor(torrent.ratio >= 1.0 ? AppColors.success : AppColors.warning)
+                    }
                 }
                 
                 GeometryReader { geometry in
