@@ -203,7 +203,7 @@ private struct SwipeableTorrentCard: View {
             
             // 只有滑动时才渲染红底，杜绝点击透红
             if offset < 0 {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                UnevenRoundedRectangle(topLeadingRadius: 12, bottomLeadingRadius: 12, topTrailingRadius: 2, bottomTrailingRadius: 2)
                     .fill(AppColors.danger)
                     .frame(width: 72)
                     .padding(.vertical, 4)
