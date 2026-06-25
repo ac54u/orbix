@@ -49,7 +49,7 @@ struct AddTorrentView: View {
             .navigationBarTitleDisplayMode(.inline)
             .fileImporter(
                 isPresented: $showFilePicker,
-                allowedContentTypes: [],
+                allowedContentTypes: [UTType(filenameExtension: "torrent") ?? .data],
                 allowsMultipleSelection: false
             ) { result in
                 Task { @MainActor in
