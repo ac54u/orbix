@@ -65,7 +65,7 @@ actor UpdateService {
         let tempDir = FileManager.default.temporaryDirectory
         let destUrl = tempDir.appendingPathComponent("Orbix-\(release.version).ipa")
 
-        var req = URLRequest(url: ipaUrl)
+        let req = URLRequest(url: ipaUrl)
         let (bytes, response) = try await session.bytes(for: req)
 
         guard let httpResp = response as? HTTPURLResponse, httpResp.statusCode == 200 else {

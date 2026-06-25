@@ -58,7 +58,7 @@ struct SearchView: View {
             }
             .navigationTitle("搜索")
             .searchable(text: $query, placement: .automatic, prompt: "搜索 torrent...")
-            .onChange(of: query) { _ in debounceSearch() }
+            .onChange(of: query) { _, _ in debounceSearch() }
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button {

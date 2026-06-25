@@ -267,8 +267,8 @@ struct SettingsView: View {
             }
 
             let cleanNotes = release.notes
-                .replacingOccurrences(of: #/\[([^\]]+)\]\([^)]+\)/#, with: "", options: .regularExpression)
-                .replacingOccurrences(of: #/https?:\/\/\S+/#, with: "", options: .regularExpression)
+                .replacingOccurrences(of: "\\[[^\\]]+\\]\\([^)]+\\)", with: "", options: .regularExpression)
+                .replacingOccurrences(of: "https?://\\S+", with: "", options: .regularExpression)
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             if !cleanNotes.isEmpty {
                 Text(cleanNotes)
