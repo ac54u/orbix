@@ -183,29 +183,48 @@ struct TorrentListView: View {
     }
 }
 
-// MARK: - 自定义高级滑动卡片
+// MARK: - 修复后的高级滑动卡片
 private struct SwipeableTorrentCard: View {
     let torrent: TorrentInfo
     let onDelete: () -> Void
     
     @State private var offset: CGFloat = 0
     @State private var isDeleting = false
+    @State private var navigateToDetail = false
     
     var body: some View {
         ZStack(alignment: .trailing) {
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(AppColors.danger)
-                .overlay(alignment: .trailing) {
-                    Image(systemName: "trash.fill")
-                        .font(.system(size: 22, weight: .bold))
-                        .foregroundColor(.white)
-                        .padding(.trailing, 24)
-                        .scaleEffect(offset < -80 ? 1.2 : 0.9)
-                        .opacity(offset < -30 ? 1 : 0)
-                        .animation(.easeOut(duration: 0.2), value: offset)
-                }
+            // 隐藏的原生导航链接，不参与手势争夺
+            NavigationLink(destination: TorrentDetailView(hash: torrent.hash), isActive: $navigateToDetail) {
+                EmptyView()
+            }
+            .hidden()
             
-            NavigationLink(destination: TorrentDetailView(hash: torrent.hash)) {
+            // 只有滑动时才渲染红底，杜绝点击透红
+            if offset < 0 {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(AppColors.danger)
+                    .overlay(alignment: .trailing) {
+                        Image(systemName: "trash.fill")
+                            .font(.system(size: 22, weight: .bold))
+                            .foregroundColor(.white)
+                            .padding(.trailing, 24)
+                            .scaleEffect(offset < -80 ? 1.2 : 0.9)
+                            .opacity(offset < -30 ? 1 : 0)
+                            .animation(.easeOut(duration: 0.2), value: offset)
+                    }
+            }
+            
+            // 改用 Button，完全掌控点击与滑动
+            Button {
+                if offset < 0 {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                        offset = 0
+                    }
+                } else {
+                    navigateToDetail = true
+                }
+            } label: {
                 TorrentRow(torrent: torrent)
                     .padding(.vertical, 14)
                     .padding(.horizontal, 16)
@@ -214,20 +233,20 @@ private struct SwipeableTorrentCard: View {
                             .fill(AppColors.card)
                     )
             }
-            .buttonStyle(.plain)
+            .buttonStyle(SolidCardButtonStyle())
             .offset(x: offset)
             .gesture(
-                DragGesture(minimumDistance: 20)
+                DragGesture(minimumDistance: 15)
                     .onChanged { value in
                         guard !isDeleting else { return }
-                        if value.translation.width < 0 {
+                        if value.translation.width < 0 && abs(value.translation.width) > abs(value.translation.height) {
                             offset = value.translation.width * 0.8
                         }
                     }
                     .onEnded { value in
                         guard !isDeleting else { return }
                         withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                            if value.translation.width < -100 {
+                            if value.translation.width < -80 || value.predictedEndTranslation.width < -150 {
                                 offset = -UIScreen.main.bounds.width
                                 isDeleting = true
                                 let impact = UIImpactFeedbackGenerator(style: .heavy)
@@ -243,6 +262,15 @@ private struct SwipeableTorrentCard: View {
                     }
             )
         }
+    }
+}
+
+// MARK: - 无透明度衰减的高级按钮样式
+struct SolidCardButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.98 : 1)
+            .animation(.easeOut(duration: 0.2), value: configuration.isPressed)
     }
 }
 
