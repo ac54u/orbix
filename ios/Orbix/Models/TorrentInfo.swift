@@ -227,10 +227,32 @@ struct TorrentProperties: Codable {
         case upSpeed = "up_speed"
         case seeds, peers, eta
         case savePath = "save_path"
-        case category, tags
-        case addedOn = "added_on"
-        case completionOn = "completion_on"
-        case hash
+        case category, tags, hash
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        totalSize = try c.decode(Int64.self, forKey: .totalSize)
+        totalDownloaded = try c.decode(Int64.self, forKey: .totalDownloaded)
+        totalUploaded = try c.decode(Int64.self, forKey: .totalUploaded)
+        dlSpeed = try c.decode(Int64.self, forKey: .dlSpeed)
+        upSpeed = try c.decode(Int64.self, forKey: .upSpeed)
+        seeds = try c.decode(Int.self, forKey: .seeds)
+        peers = try c.decode(Int.self, forKey: .peers)
+        eta = try c.decode(Int64.self, forKey: .eta)
+        savePath = try c.decode(String.self, forKey: .savePath)
+        category = try c.decode(String.self, forKey: .category)
+        tags = try c.decode(String.self, forKey: .tags)
+        hash = try c.decode(String.self, forKey: .hash)
+
+        let raw = try decoder.container(keyedBy: RawKeys.self)
+        addedOn = (try? raw.decode(Int64.self, forKey: .added)) ?? -1
+        completionOn = (try? raw.decode(Int64.self, forKey: .completed)) ?? -1
+    }
+
+    enum RawKeys: String, CodingKey {
+        case added = "added_on"
+        case completed = "completion_on"
     }
 }
 
