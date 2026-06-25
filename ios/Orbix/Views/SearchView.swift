@@ -18,11 +18,11 @@ struct SearchView: View {
     @State private var searchTask: Task<Void, Never>?
 
     // MARK: - Grid Layout (pinch to zoom)
-    @AppStorage("searchGridColumns") private var gridColumnCount = 2
+    @AppStorage("searchGridColumns") private var gridColumnCount = 4
     @State private var pinchBaseColumns: Int?
 
     private var gridColumns: [GridItem] {
-        Array(repeating: GridItem(.flexible(), spacing: 10), count: gridColumnCount)
+        Array(repeating: GridItem(.flexible(), spacing: 1), count: gridColumnCount)
     }
 
     private var pinchToZoom: some Gesture {
@@ -129,14 +129,13 @@ struct SearchView: View {
                 if results.isEmpty {
                     gridSkeleton
                 } else {
-                    LazyVGrid(columns: gridColumns, spacing: 10) {
+                    LazyVGrid(columns: gridColumns, spacing: 1) {
                         ForEach(results) { torrent in
-                            TorrentCard(torrent: torrent, isBookmarked: bookmarks.contains(torrent.code))
+                            TorrentCard(torrent: torrent)
                                 .onTapGesture { selectedTorrent = torrent }
                                 .contextMenu { cardContextMenu(torrent) }
                         }
                     }
-                    .padding(.horizontal, 16)
                 }
             }
         }
@@ -159,15 +158,14 @@ struct SearchView: View {
     // MARK: - Results
     private var resultsView: some View {
         ScrollView {
-            LazyVGrid(columns: gridColumns, spacing: 10) {
+            LazyVGrid(columns: gridColumns, spacing: 1) {
                 ForEach(results) { torrent in
-                    TorrentCard(torrent: torrent, isBookmarked: bookmarks.contains(torrent.code))
+                    TorrentCard(torrent: torrent)
                         .onTapGesture { selectedTorrent = torrent }
                         .contextMenu { cardContextMenu(torrent) }
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 8)
+            .padding(.top, 1)
 
             if !results.isEmpty {
                 VStack(spacing: 4) {
@@ -282,26 +280,22 @@ struct SearchView: View {
     }
 
     private var gridSkeleton: some View {
-        LazyVGrid(columns: gridColumns, spacing: 10) {
-            ForEach(0..<6, id: \.self) { _ in
-                RoundedRectangle(cornerRadius: 10).fill(AppColors.card).aspectRatio(0.72, contentMode: .fit)
+        LazyVGrid(columns: gridColumns, spacing: 1) {
+            ForEach(0..<12, id: \.self) { _ in
+                RoundedRectangle(cornerRadius: 1)
+                    .fill(AppColors.card.opacity(0.5))
+                    .aspectRatio(1, contentMode: .fit)
             }
         }
-        .padding(.horizontal, 16)
     }
 }
 
-// MARK: - Torrent Card
+// MARK: - Torrent Card (square photo wall style)
 private struct TorrentCard: View {
     let torrent: ScrapedTorrent
-    let isBookmarked: Bool
 
     var body: some View {
-        ZStack(alignment: .bottomLeading) {
-            // 1. 底色
-            AppColors.card
-
-            // 2. 图片层
+        ZStack(alignment: .bottomTrailing) {
             AsyncImage(url: URL(string: torrent.thumbnail ?? "")) { phase in
                 switch phase {
                 case .success(let img):
@@ -309,58 +303,23 @@ private struct TorrentCard: View {
                         .aspectRatio(contentMode: .fill)
                         .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
                 case .failure, .empty:
-                    Color.clear
+                    AppColors.card
                 @unknown default:
-                    Color.clear
+                    AppColors.card
                 }
             }
 
-            // 3. 底部渐变遮罩
-            LinearGradient(colors: [.clear, .black.opacity(0.6)],
-                           startPoint: .top, endPoint: .bottom)
-                .frame(height: 100)
-                .frame(maxHeight: .infinity, alignment: .bottom)
-
-            // 4. 文字信息
-            VStack(alignment: .leading, spacing: 2) {
-                Text(torrent.code)
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundColor(.white).lineLimit(1)
-                Text(torrent.size)
-                    .font(.system(size: 11))
-                    .foregroundColor(.white.opacity(0.7))
-                if let desc = torrent.description, !desc.isEmpty {
-                    Text(desc)
-                        .font(.system(size: 9))
-                        .foregroundColor(.white.opacity(0.6))
-                        .lineLimit(1)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 10)
-            .padding(.bottom, 10)
-
-            // 5. 收藏图标
-            if isBookmarked {
-                Circle().fill(AppColors.danger).frame(width: 20, height: 20)
-                    .overlay(Image(systemName: "heart.fill").font(.system(size: 9)).foregroundColor(.white))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                    .padding(6)
-            }
-
-            // 6. 日期标签
-            if !torrent.date.isEmpty {
-                Text(torrent.date)
-                    .font(.system(size: 9)).foregroundColor(.white.opacity(0.8))
-                    .padding(.horizontal, 6).padding(.vertical, 2)
-                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 4))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-                    .padding(6)
-            }
+            // Size badge at bottom-right
+            Text(torrent.size)
+                .font(.system(size: 10, weight: .regular))
+                .foregroundColor(.white)
+                .padding(.horizontal, 5)
+                .padding(.vertical, 2)
+                .background(.black.opacity(0.5), in: RoundedRectangle(cornerRadius: 2))
+                .padding(4)
         }
-        // 在最外层统一限制比例并裁剪，内部任何 fill 的元素都绝对不会溢出
-        .aspectRatio(0.72, contentMode: .fit)
-        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .aspectRatio(1, contentMode: .fit)
+        .clipShape(RoundedRectangle(cornerRadius: 1))
     }
 }
 
