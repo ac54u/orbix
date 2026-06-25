@@ -368,9 +368,20 @@ private struct TorrentRow: View {
                     
                     Spacer(minLength: 0)
                     
-                    Text(formatBytes(torrent.size))
-                        .font(.system(size: 14, weight: .medium, design: .monospaced))
-                        .foregroundColor(AppColors.secondaryLabel)
+                    VStack(alignment: .trailing, spacing: 2) {
+                        Text(formatBytes(torrent.size))
+                            .font(.system(size: 14, weight: .medium, design: .monospaced))
+                            .foregroundColor(AppColors.secondaryLabel)
+                        if torrent.ratio > 0 {
+                            HStack(spacing: 3) {
+                                Image(systemName: "arrow.up.arrow.down")
+                                    .font(.system(size: 10))
+                                Text(String(format: "%.2f", torrent.ratio))
+                                    .font(.system(size: 13, design: .monospaced))
+                            }
+                            .foregroundColor(torrent.ratio >= 1.0 ? AppColors.success : AppColors.warning)
+                        }
+                    }
                 }
                 
                 HStack(spacing: 6) {
@@ -400,15 +411,6 @@ private struct TorrentRow: View {
                         Text("↑\(formatSpeed(torrent.upspeed))")
                             .font(.system(size: 12, design: .monospaced))
                             .foregroundColor(AppColors.success)
-                    }
-
-                    if torrent.ratio > 0 {
-                        Text("•")
-                            .foregroundColor(AppColors.tertiaryLabel)
-                            .font(.system(size: 10))
-                        Text(String(format: "%.2f", torrent.ratio))
-                            .font(.system(size: 12, weight: .medium, design: .monospaced))
-                            .foregroundColor(torrent.ratio >= 1.0 ? AppColors.success : AppColors.warning)
                     }
                 }
                 
