@@ -24,25 +24,22 @@ struct SettingsView: View {
 
                 if isLoading {
                     VStack(spacing: 12) {
-                        SkeletonBar(height: 80)
-                        SkeletonBar(height: 80)
+                        SkeletonBar(height: 100)
+                        SkeletonBar(height: 72)
                         SkeletonBar(height: 80)
                     }
                     .padding(.horizontal, 20)
                     .padding(.top, 20)
                 } else {
                     ScrollView {
-                        LazyVStack(spacing: 12) {
-                            Text("服务器").sectionHeader()
-                                .frame(maxWidth: .infinity, alignment: .leading)
+                        LazyVStack(spacing: 16) {
+                            serverSectionHeader
                             serverCard
 
-                            Text("安全").sectionHeader()
-                                .frame(maxWidth: .infinity, alignment: .leading)
+                            securitySectionHeader
                             securityCard
 
-                            Text("更新").sectionHeader()
-                                .frame(maxWidth: .infinity, alignment: .leading)
+                            updateSectionHeader
                             updateCard
 
                             Color.clear.frame(height: 80)
@@ -53,49 +50,106 @@ struct SettingsView: View {
                 }
             }
             .navigationTitle("设置")
+            .navigationBarTitleDisplayMode(.large)
             .onAppear { loadInfo() }
+        }
+    }
+
+    // MARK: - Section Headers
+    private var serverSectionHeader: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "server.rack")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(AppColors.accent)
+            Text("服务器").sectionHeader()
+            Spacer()
+        }
+    }
+
+    private var securitySectionHeader: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "lock.shield")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(AppColors.accent)
+            Text("安全").sectionHeader()
+            Spacer()
+        }
+    }
+
+    @ViewBuilder
+    private var updateSectionHeader: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "arrow.triangle.2.circlepath")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(AppColors.accent)
+            Text("更新").sectionHeader()
+            Spacer()
         }
     }
 
     // MARK: - Server Card
     private var serverCard: some View {
         VStack(spacing: 0) {
-            settingsRow(label: "名称", value: serverName)
-            Divider().background(AppColors.separator)
-            settingsRow(label: "地址") {
-                HStack(spacing: 4) {
-                    Image(systemName: serverURL.hasPrefix("https") ? "lock.fill" : "lock.open")
-                        .font(.caption2)
-                        .foregroundColor(serverURL.hasPrefix("https") ? AppColors.success : AppColors.secondaryLabel)
-                    Text(serverURL)
-                        .font(.system(size: 14, weight: .medium, design: .monospaced))
-                        .foregroundColor(AppColors.secondaryLabel)
+            // Header row — server name + HTTPS badge
+            HStack(spacing: 10) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(AppColors.accent.opacity(0.12))
+                        .frame(width: 40, height: 40)
+                    Image(systemName: "server.rack")
+                        .font(.system(size: 18, weight: .medium))
+                        .foregroundColor(AppColors.accent)
                 }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(serverName)
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(AppColors.label)
+                    HStack(spacing: 4) {
+                        Image(systemName: serverURL.hasPrefix("https") ? "lock.fill" : "lock.open")
+                            .font(.caption2)
+                            .foregroundColor(serverURL.hasPrefix("https") ? AppColors.success : AppColors.warning)
+                        Text(serverURL)
+                            .font(.system(size: 13, weight: .regular, design: .monospaced))
+                            .foregroundColor(AppColors.tertiaryLabel)
+                            .lineLimit(1)
+                    }
+                }
+                Spacer()
             }
+            .padding(.horizontal, 16)
+            .padding(.top, 16)
+
+            // Divider + details
+            Divider()
+                .background(AppColors.separator)
+                .padding(.top, 14)
+
             if !serverVersion.isEmpty {
+                serverInfoRow(icon: "cube", label: "qBittorrent", value: serverVersion)
                 Divider().background(AppColors.separator)
-                settingsRow(label: "qBittorrent 版本", value: serverVersion)
             }
-            Divider().background(AppColors.separator)
-            settingsRow(label: "用户", value: username)
+
+            serverInfoRow(icon: "person", label: "用户", value: username)
 
             Divider().background(AppColors.separator)
 
+            // Logout button
             Button {
                 logout()
             } label: {
-                HStack {
-                    Spacer()
+                HStack(spacing: 6) {
+                    Image(systemName: "rectangle.portrait.and.arrow.right")
+                        .font(.system(size: 14))
                     Text("切换服务器")
                         .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(AppColors.danger)
                     Spacer()
                 }
-                .padding(.vertical, 6)
+                .foregroundColor(AppColors.danger)
+                .padding(.vertical, 12)
+                .padding(.horizontal, 16)
             }
         }
-        .padding(.vertical, 14)
-        .padding(.horizontal, 16)
         .background(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .fill(AppColors.card)
@@ -103,124 +157,233 @@ struct SettingsView: View {
     }
 
     // MARK: - Security Card
+    @ViewBuilder
     private var securityCard: some View {
-        Group {
-            if appLock.isDeviceSupported {
-                VStack(spacing: 0) {
-                    HStack {
-                        Image(systemName: "faceid")
-                            .foregroundColor(AppColors.accent)
-                            .font(.system(size: 18))
-                        Text(appLock.hasFaceID ? "Face ID" : "生物识别")
-                            .font(.system(size: 14))
-                            .foregroundColor(AppColors.secondaryLabel)
-                        Spacer()
-                        Toggle("", isOn: $appLock.isEnabled)
-                            .labelsHidden()
-                            .tint(AppColors.accent)
+        if appLock.isDeviceSupported {
+            VStack(spacing: 0) {
+                HStack {
+                    HStack(spacing: 10) {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(AppColors.accent.opacity(0.12))
+                                .frame(width: 32, height: 32)
+                            Image(systemName: appLock.hasFaceID ? "faceid" : "touchid")
+                                .font(.system(size: 16, weight: .medium))
+                                .foregroundColor(AppColors.accent)
+                        }
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(appLock.hasFaceID ? "Face ID" : "生物识别")
+                                .font(.system(size: 15, weight: .medium))
+                                .foregroundColor(AppColors.label)
+                            if appLock.isEnabled {
+                                Text("已启用")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(AppColors.success)
+                            } else {
+                                Text("已关闭")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(AppColors.tertiaryLabel)
+                            }
+                        }
                     }
+                    Spacer()
+                    Toggle("", isOn: $appLock.isEnabled)
+                        .labelsHidden()
+                        .tint(AppColors.accent)
+                        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: appLock.isEnabled)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 14)
 
-                    if appLock.isEnabled {
-                        Divider().background(AppColors.separator)
+                if appLock.isEnabled {
+                    Divider().background(AppColors.separator)
+                    HStack(spacing: 8) {
+                        Image(systemName: "info.circle")
+                            .font(.system(size: 12))
+                            .foregroundColor(AppColors.tertiaryLabel)
                         Text("应用进入后台超过 8 秒后将自动锁定")
                             .font(.system(size: 12))
                             .foregroundColor(AppColors.tertiaryLabel)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.top, 10)
+                        Spacer()
                     }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
                 }
-                .padding(.vertical, 14)
-                .padding(.horizontal, 16)
-                .background(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .fill(AppColors.card)
-                )
             }
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(AppColors.card)
+            )
         }
     }
 
     // MARK: - Update Card
     private var updateCard: some View {
         VStack(spacing: 0) {
-            settingsRow(label: "当前版本", value: "v\(appVersion)")
+            // Version row
+            HStack {
+                HStack(spacing: 10) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(AppColors.success.opacity(0.12))
+                            .frame(width: 32, height: 32)
+                        Image(systemName: "checkmark.circle")
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundColor(AppColors.success)
+                    }
+                    Text("当前版本")
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundColor(AppColors.label)
+                }
+                Spacer()
+                Text("v\(appVersion)")
+                    .font(.system(size: 14, weight: .medium, design: .monospaced))
+                    .foregroundColor(AppColors.secondaryLabel)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
+
             Divider().background(AppColors.separator)
 
+            // Check update row
             Button {
                 checkUpdate()
             } label: {
-                HStack {
+                HStack(spacing: 10) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(AppColors.accent.opacity(0.12))
+                            .frame(width: 32, height: 32)
+                        if isCheckingUpdate {
+                            ProgressView()
+                                .tint(AppColors.accent)
+                                .scaleEffect(0.7)
+                        } else {
+                            Image(systemName: "arrow.triangle.2.circlepath")
+                                .font(.system(size: 16, weight: .medium))
+                                .foregroundColor(AppColors.accent)
+                        }
+                    }
                     Text("检查更新")
-                        .font(.system(size: 14))
-                        .foregroundColor(AppColors.secondaryLabel)
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundColor(AppColors.label)
                     Spacer()
-                    if isCheckingUpdate {
-                        ProgressView()
-                            .tint(AppColors.accent)
-                    } else {
+                    if !isCheckingUpdate {
                         Image(systemName: "chevron.right")
                             .font(.system(size: 14, weight: .medium))
                             .foregroundColor(AppColors.tertiaryLabel)
                     }
                 }
-                .padding(.vertical, 10)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 14)
             }
             .disabled(isCheckingUpdate)
 
+            // Update result
             if let check = updateCheck {
+                Divider().background(AppColors.separator)
+
                 if let release = check.latest {
-                    Divider().background(AppColors.separator)
-                    updateDownloadCard(release)
-                        .padding(.top, 12)
+                    updateReleaseCard(release)
+                        .padding(12)
                 } else if let error = check.error {
-                    Divider().background(AppColors.separator)
-                    Text("检查失败: \(error)")
-                        .font(.system(size: 12))
-                        .foregroundColor(AppColors.danger)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.top, 10)
+                    HStack(spacing: 8) {
+                        Image(systemName: "exclamationmark.triangle")
+                            .font(.system(size: 12))
+                            .foregroundColor(AppColors.warning)
+                        Text("检查失败: \(error)")
+                            .font(.system(size: 12))
+                            .foregroundColor(AppColors.warning)
+                        Spacer()
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
                 } else {
-                    Divider().background(AppColors.separator)
-                    HStack {
+                    HStack(spacing: 8) {
                         Image(systemName: "checkmark.circle.fill")
                             .foregroundColor(AppColors.success)
                             .font(.system(size: 14))
                         Text("已是最新版本")
-                            .font(.system(size: 14))
-                            .foregroundColor(AppColors.secondaryLabel)
+                            .font(.system(size: 13))
+                            .foregroundColor(AppColors.success)
+                        Spacer()
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.top, 10)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
                 }
             }
 
+            // Download progress
             if isDownloading {
                 Divider().background(AppColors.separator)
                 VStack(spacing: 8) {
-                    ProgressView(value: downloadProgress)
-                        .tint(AppColors.accent)
-                    Text("\(Int(downloadProgress * 100))%")
-                        .font(.system(size: 12))
-                        .foregroundColor(AppColors.tertiaryLabel)
+                    GeometryReader { geo in
+                        ZStack(alignment: .leading) {
+                            RoundedRectangle(cornerRadius: 2).fill(AppColors.separator)
+                            RoundedRectangle(cornerRadius: 2)
+                                .fill(AppColors.accent)
+                                .frame(width: geo.size.width * downloadProgress)
+                        }
+                    }
+                    .frame(height: 4)
+
+                    HStack {
+                        Text("正在下载...")
+                            .font(.system(size: 12))
+                            .foregroundColor(AppColors.tertiaryLabel)
+                        Spacer()
+                        Text("\(min(99, Int(downloadProgress * 100)))%")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(AppColors.accent)
+                    }
                 }
-                .padding(.top, 10)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
             }
         }
-        .padding(.vertical, 14)
-        .padding(.horizontal, 16)
         .background(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .fill(AppColors.card)
         )
     }
 
-    private func updateDownloadCard(_ release: AppRelease) -> some View {
+    // MARK: - Sub-Components
+    private func serverInfoRow(icon: String, label: String, value: String) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: icon)
+                .font(.system(size: 13))
+                .foregroundColor(AppColors.tertiaryLabel)
+                .frame(width: 18)
+            Text(label)
+                .font(.system(size: 14))
+                .foregroundColor(AppColors.secondaryLabel)
+            Spacer()
+            Text(value)
+                .font(.system(size: 14, weight: .medium, design: .monospaced))
+                .foregroundColor(AppColors.label)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+    }
+
+    private func updateReleaseCard(_ release: AppRelease) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack {
+            HStack(spacing: 8) {
                 Image(systemName: "arrow.down.circle.fill")
+                    .font(.system(size: 16))
                     .foregroundColor(AppColors.accent)
-                Text("v\(release.version) 可用")
-                    .font(.system(size: 14, weight: .semibold))
+                Text("v\(release.version)")
+                    .font(.system(size: 15, weight: .semibold))
                     .foregroundColor(AppColors.accent)
+                Text("可用")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(AppColors.accent)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(AppColors.accent.opacity(0.15))
+                    )
                 Spacer()
                 if let size = release.ipaSize {
                     Text(formatBytes(size))
@@ -234,6 +397,7 @@ struct SettingsView: View {
                     .font(.system(size: 13))
                     .foregroundColor(AppColors.secondaryLabel)
                     .lineLimit(4)
+                    .lineSpacing(2)
             }
 
             Button {
@@ -241,14 +405,18 @@ struct SettingsView: View {
             } label: {
                 HStack {
                     Spacer()
-                    Text(isDownloading ? "下载中..." : "下载并安装")
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(.white)
+                    if isDownloading {
+                        Text("下载中...")
+                    } else {
+                        Label("下载并安装", systemImage: "icloud.and.arrow.down")
+                    }
                     Spacer()
                 }
-                .padding(.vertical, 10)
+                .font(.system(size: 14, weight: .medium))
+                .foregroundColor(.white)
+                .padding(.vertical, 11)
                 .background(
-                    RoundedRectangle(cornerRadius: 12)
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
                         .fill(AppColors.accent)
                 )
             }
@@ -256,34 +424,9 @@ struct SettingsView: View {
         }
         .padding(12)
         .background(
-            RoundedRectangle(cornerRadius: 10)
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .fill(AppColors.accentSoftBg)
         )
-    }
-
-    // MARK: - Row Helper
-    private func settingsRow(label: String, value: String) -> some View {
-        HStack {
-            Text(label)
-                .font(.system(size: 14))
-                .foregroundColor(AppColors.secondaryLabel)
-            Spacer()
-            Text(value)
-                .font(.system(size: 14, weight: .medium, design: .monospaced))
-                .foregroundColor(AppColors.label)
-        }
-        .padding(.vertical, 10)
-    }
-
-    private func settingsRow(label: String, @ViewBuilder value: () -> some View) -> some View {
-        HStack {
-            Text(label)
-                .font(.system(size: 14))
-                .foregroundColor(AppColors.secondaryLabel)
-            Spacer()
-            value()
-        }
-        .padding(.vertical, 10)
     }
 
     // MARK: - Data
