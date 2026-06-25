@@ -255,7 +255,7 @@ struct SettingsView: View {
     private func updateReleaseCard(_ release: AppRelease) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("v\(release.version)")
+                Text(release.version)
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundColor(AppColors.accent)
                 Spacer()
@@ -266,8 +266,12 @@ struct SettingsView: View {
                 }
             }
 
-            if !release.notes.isEmpty {
-                Text(release.notes)
+            let cleanNotes = release.notes
+                .replacingOccurrences(of: #/\[([^\]]+)\]\([^)]+\)/#, with: "", options: .regularExpression)
+                .replacingOccurrences(of: #/https?:\/\/\S+/#, with: "", options: .regularExpression)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if !cleanNotes.isEmpty {
+                Text(cleanNotes)
                     .font(.system(size: 13))
                     .foregroundColor(AppColors.secondaryLabel)
                     .lineLimit(4)
