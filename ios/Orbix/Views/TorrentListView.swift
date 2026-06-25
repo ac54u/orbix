@@ -203,15 +203,17 @@ private struct SwipeableTorrentCard: View {
             
             // 只有滑动时才渲染红底，杜绝点击透红
             if offset < 0 {
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .fill(AppColors.danger)
+                    .frame(width: 72)
+                    .padding(.vertical, 12)
                     .overlay(alignment: .trailing) {
                         Image(systemName: "trash.fill")
-                            .font(.system(size: 22, weight: .bold))
+                            .font(.system(size: 20, weight: .bold))
                             .foregroundColor(.white)
-                            .padding(.trailing, 24)
-                            .scaleEffect(offset < -80 ? 1.2 : 0.9)
-                            .opacity(offset < -30 ? 1 : 0)
+                            .padding(.trailing, 16)
+                            .scaleEffect(offset < -50 ? 1.2 : 0.9)
+                            .opacity(offset < -20 ? 1 : 0)
                             .animation(.easeOut(duration: 0.2), value: offset)
                     }
                     .onTapGesture {
@@ -267,8 +269,8 @@ private struct SwipeableTorrentCard: View {
                         return
                     }
                     withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                        if value.translation.width < -80 {
-                            offset = -100
+                        if value.translation.width < -50 {
+                            offset = -72
                         } else {
                             offset = 0
                         }
