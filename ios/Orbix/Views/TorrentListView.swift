@@ -42,28 +42,50 @@ struct TorrentListView: View {
                             .foregroundColor(AppColors.secondaryLabel)
                     }
                 } else {
-                    ScrollView {
-                        LazyVStack(spacing: 12) {
-                            ForEach(filteredTorrents) { torrent in
+                    List {
+                        Color.clear.frame(height: 10)
+                            .listRowSeparator(.hidden)
+                            .listRowBackground(Color.clear)
+                            .listRowInsets(EdgeInsets())
+
+                        ForEach(filteredTorrents) { torrent in
+                            ZStack {
                                 NavigationLink(destination: TorrentDetailView(hash: torrent.hash)) {
-                                    TorrentRow(torrent: torrent)
-                                        .padding(.vertical, 14)
-                                        .padding(.horizontal, 16)
-                                        .background(
-                                            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                                .fill(AppColors.card)
-                                        )
+                                    EmptyView()
                                 }
-                                .buttonStyle(CardButtonStyle())
+                                .opacity(0)
+                                
+                                TorrentRow(torrent: torrent)
+                                    .padding(.vertical, 14)
+                                    .padding(.horizontal, 16)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                            .fill(AppColors.card)
+                                    )
+                            }
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
+                            .listRowInsets(EdgeInsets(top: 6, leading: 20, bottom: 6, trailing: 20))
+                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                Button(role: .destructive) {
+                                    executeDelete(torrent)
+                                } label: {
+                                    Label("删除", systemImage: "trash")
+                                }
                             }
                         }
-                        .padding(.vertical, 16)
-                        .padding(.horizontal, 20)
-                        .animation(.spring(response: 0.4, dampingFraction: 0.8), value: filteredTorrents.map(\.id))
+                        
+                        Color.clear.frame(height: 80)
+                            .listRowSeparator(.hidden)
+                            .listRowBackground(Color.clear)
+                            .listRowInsets(EdgeInsets())
                     }
+                    .listStyle(.plain)
+                    .scrollContentBackground(.hidden)
                     .refreshable {
                         await manualRefresh()
                     }
+                    .animation(.spring(response: 0.4, dampingFraction: 0.8), value: filteredTorrents.map(\.id))
                 }
             }
             .safeAreaInset(edge: .bottom) {
@@ -104,7 +126,7 @@ struct TorrentListView: View {
                     Button {
                         let impact = UISelectionFeedbackGenerator()
                         impact.selectionChanged()
-
+                        
                         withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
                             filter = f
                         }
@@ -159,7 +181,7 @@ struct TorrentListView: View {
             }
         }
     }
-
+    
     @Sendable private func manualRefresh() async {
         let list = (try? await QBitApi.shared.getTorrents()) ?? torrents
         let transfer = try? await QBitApi.shared.getTransferInfo()
@@ -169,18 +191,29 @@ struct TorrentListView: View {
             self.globalUpSpeed = transfer?.upInfoSpeed ?? 0
         }
     }
-}
 
-// MARK: - Card Button Style
-struct CardButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .scaleEffect(configuration.isPressed ? 0.96 : 1.0)
-            .opacity(configuration.isPressed ? 0.8 : 1.0)
-            .animation(.easeOut(duration: 0.2), value: configuration.isPressed)
+    private func executeDelete(_ torrent: TorrentInfo) {
+        Task {
+            do {
+                try await QBitApi.shared.deleteTorrent(torrent.hash, deleteFiles: true)
+                
+                await MainActor.run {
+                    withAnimation {
+                        self.torrents.removeAll { $0.hash == torrent.hash }
+                    }
+                }
+                
+                let generator = UINotificationFeedbackGenerator()
+                generator.notificationOccurred(.success)
+            } catch {
+                let generator = UINotificationFeedbackGenerator()
+                generator.notificationOccurred(.error)
+            }
+        }
     }
 }
 
+// MARK: - 组件部分保持不变
 private struct GlobalSpeedPill: View {
     let dl: Int64
     let up: Int64
