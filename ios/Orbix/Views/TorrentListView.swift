@@ -192,6 +192,7 @@ private struct SwipeableTorrentCard: View {
     @State private var isDeleting = false
     @State private var navigateToDetail = false
     @State private var isDragging = false
+    @State private var autoDismissTask: Task<Void, Never>?
     
     var body: some View {
         ZStack(alignment: .trailing) {
@@ -217,6 +218,7 @@ private struct SwipeableTorrentCard: View {
                             .animation(.easeOut(duration: 0.2), value: offset)
                     }
                     .onTapGesture {
+                        autoDismissTask?.cancel()
                         guard !isDeleting else { return }
                         withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                             offset = -UIScreen.main.bounds.width
@@ -232,6 +234,7 @@ private struct SwipeableTorrentCard: View {
             
             // 改用 Button，完全掌控点击与滑动
             Button {
+                autoDismissTask?.cancel()
                 guard !isDragging else { return }
                 if offset < 0 {
                     withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
@@ -280,6 +283,19 @@ private struct SwipeableTorrentCard: View {
                     }
                 }
         )
+        .onChange(of: offset) { _, newValue in
+            autoDismissTask?.cancel()
+            guard newValue < 0, !isDeleting else { return }
+            autoDismissTask = Task {
+                try? await Task.sleep(nanoseconds: 3_000_000_000)
+                guard !Task.isCancelled, !isDeleting else { return }
+                await MainActor.run {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                        offset = 0
+                    }
+                }
+            }
+        }
     }
 }
 
