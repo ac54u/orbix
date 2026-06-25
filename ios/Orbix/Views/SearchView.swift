@@ -59,16 +59,14 @@ struct SearchView: View {
             .navigationTitle("搜索")
             .searchable(text: $query, placement: .automatic, prompt: "搜索 torrent...")
             .onChange(of: query) { _ in debounceSearch() }
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button {
-                        loadBookmarks()
-                    } label: {
-                        Image(systemName: bookmarks.isEmpty ? "heart" : "heart.fill")
-                            .foregroundColor(AppColors.accent)
-                    }
+        .toolbar(id: "bookmark_\(bookmarks.count)") {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button { loadBookmarks() } label: {
+                    Image(systemName: bookmarks.isEmpty ? "heart" : "heart.fill")
+                        .foregroundColor(AppColors.accent)
                 }
             }
+        }
             .onAppear { loadBookmarks(); if allResults.isEmpty { loadLatest() } }
             .sheet(item: $selectedTorrent) { TorrentDetailSheet(torrent: $0, bookmarks: $bookmarks, onChanged: saveBookmarks) }
             .fullScreenCover(isPresented: $showMediaViewer) {
