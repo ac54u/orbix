@@ -6,13 +6,13 @@ actor TorrentSearchService {
 
     private let session = URLSession.shared
 
-    func trending(pages: Int = 2, startPage: Int = 1) async throws -> [ScrapedTorrent] {
+    func trending(pages: Int = 2) async throws -> [ScrapedTorrent] {
         var allResults: [ScrapedTorrent] = []
 
         try await withThrowingTaskGroup(of: [ScrapedTorrent].self) { group in
-            for page in startPage..<(startPage + pages) {
+            for page in 1...pages {
                 group.addTask {
-                    try await self.fetchPage(page, query: nil)
+                    try await self.fetchSearchPage(page, query: "a")
                 }
             }
 
@@ -30,7 +30,7 @@ actor TorrentSearchService {
         try await withThrowingTaskGroup(of: [ScrapedTorrent].self) { group in
             for page in startPage..<(startPage + pages) {
                 group.addTask {
-                    try await self.fetchPage(page, query: query)
+                    try await self.fetchSearchPage(page, query: query)
                 }
             }
 
@@ -50,18 +50,13 @@ actor TorrentSearchService {
         return allResults
     }
 
-    private func fetchPage(_ page: Int, query: String?) async throws -> [ScrapedTorrent] {
-        let urlStr: String
-        if let query = query, !query.isEmpty {
-            let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query
-            urlStr = "https://www.141ppv.com/page/\(page)?s=\(encoded)"
-        } else {
-            urlStr = "https://www.141ppv.com/page/\(page)/"
-        }
+    private func fetchSearchPage(_ page: Int, query: String) async throws -> [ScrapedTorrent] {
+        let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query
+        let urlStr = "https://www.141ppv.com/search/?q=\(encoded)&page=\(page)"
 
         guard let url = URL(string: urlStr) else { return [] }
 
-        let (data, response) = try await session.data(from: url)
+        let (data, _) = try await session.data(from: url)
         guard let html = String(data: data, encoding: .utf8) else { return [] }
 
         return parseList(html)
@@ -70,8 +65,7 @@ actor TorrentSearchService {
     private func parseList(_ html: String) -> [ScrapedTorrent] {
         var results: [ScrapedTorrent] = []
 
-        // Extract card blocks
-        let cardPattern = #"<article[^>]*class=\"(?:[^\"]*\s)?post-card(?:[^\"]*)\"[^>]*>.*?</article>"#
+        let cardPattern = #"<div class="card mb-3">.*?</div>\s*</div>\s*</div>"#
         guard let cardRegex = try? NSRegularExpression(pattern: cardPattern, options: [.dotMatchesLineSeparators]) else {
             return results
         }
@@ -91,18 +85,18 @@ actor TorrentSearchService {
     }
 
     private func parseCard(_ card: String) -> ScrapedTorrent? {
-        let code = extract(from: card, pattern: #"data-code=\"([^\"]+)\""#) ?? ""
+        let code = extract(from: card, pattern: #"href="/torrent/([^"]+)""#) ?? ""
         guard !code.isEmpty else { return nil }
 
-        let title = extract(from: card, pattern: #"<h2[^>]*class=\"entry-title[^\"]*\"[^>]*><a[^>]*>(.*?)</a>"#)?
-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let thumbnail = extract(from: card, pattern: #"src=\"([^\"]+\.(?:jpg|jpeg|png|webp))"#)
-        let magnet = extract(from: card, pattern: #"href=\"(magnet:\?[^\"]+)"#) ?? ""
-        let torrentUrl = extract(from: card, pattern: #"href=\"([^\"]+\.torrent)"#)
-        let pageUrl = extract(from: card, pattern: #"<a[^>]*href=\"([^\"]+)\"[^>]*rel=\"bookmark\""#)
-        let size = extract(from: card, pattern: #"class=\"size[^\"]*\">([^<]+)"#) ?? "N/A"
-        let date = extract(from: card, pattern: #"class=\"date[^\"]*\">([^<]+)"#) ?? ""
-        let desc = extract(from: card, pattern: #"<div class=\"entry-summary[^\"]*\"[^>]*>(.*?)</div>"#)
+        let title = extract(from: card, pattern: #"class="title is-4 is-spaced">.*?<a[^>]*>([^<]+)</a>"#)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? code
+        let thumbnail = extract(from: card, pattern: #"<img[^>]*src="([^"]+\.(?:jpg|jpeg|png|webp|avif))"#)
+        let magnet = extract(from: card, pattern: #"href="(magnet:\?[^"]+)""#) ?? ""
+        let torrentUrl = extract(from: card, pattern: #"href="(/download/[^"]+\.torrent)"#)
+        let pageUrl = extract(from: card, pattern: #"href="(/torrent/[^"]+)""#)
+        let size = extract(from: card, pattern: #"class="is-size-6 has-text-grey">([^<]+)"#) ?? "N/A"
+        let date = extract(from: card, pattern: #"subtitle is-6">.*?<a[^>]*>([^<]+)</a>"#) ?? ""
+        let desc = extract(from: card, pattern: #"class="level has-text-grey-dark">(.*?)</p>"#)
 
         return ScrapedTorrent(
             code: code,
