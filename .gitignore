@@ -31,6 +31,9 @@ migrate_working_dir/
 .pub/
 /build/
 
+cookies.txt
+session-ses_*.md
+
 # Symbolication related
 app.*.symbols
 
