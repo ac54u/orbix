@@ -263,15 +263,8 @@ private struct SwipeableTorrentCard: View {
                         return
                     }
                     withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                        if value.translation.width < -80 || value.predictedEndTranslation.width < -150 {
-                            offset = -UIScreen.main.bounds.width
-                            isDeleting = true
-                            let impact = UIImpactFeedbackGenerator(style: .heavy)
-                            impact.impactOccurred()
-
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                                onDelete()
-                            }
+                        if value.translation.width < -80 {
+                            offset = -100
                         } else {
                             offset = 0
                         }
