@@ -215,7 +215,7 @@ struct TorrentDetailView: View {
                     DetailRow(icon: "timer", iconColor: AppColors.secondaryLabel, label: "预计完成", value: torrent.etaFormatted)
                 }
                 Divider().padding(.leading, 44)
-                DetailRow(icon: "person.2.fill", iconColor: AppColors.secondaryLabel, label: "种子/吸血", value: "\(torrent.numSeeds) / \(torrent.numLeechs)")
+                DetailRow(icon: "person.2.fill", iconColor: AppColors.secondaryLabel, label: "种子/吸血", value: "\(String(torrent.numSeeds)) / \(String(torrent.numLeechs))")
             }
             .background(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
@@ -407,7 +407,7 @@ struct TorrentDetailView: View {
                     let peer = peers[index]
                     VStack(alignment: .leading, spacing: 4) {
                         HStack {
-                            Text("\(peer.ip):\(peer.port)")
+                            Text("\(peer.ip):\(String(peer.port))")
                                 .font(.system(size: 13, weight: .medium, design: .monospaced))
                                 .foregroundColor(AppColors.label)
                             if !peer.country.isEmpty {
