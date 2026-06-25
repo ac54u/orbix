@@ -361,6 +361,18 @@ private struct TorrentCard: View {
                 }
             }
 
+            // Date badge at top-right — Swiftgram Pro style
+            if !torrent.date.isEmpty {
+                Text(torrent.date)
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2)
+                    .background(Capsule().fill(.black.opacity(0.5)))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                    .padding(3)
+            }
+
             // Size badge — Swiftgram Pro style pill at bottom-right
             Text(torrent.size)
                 .font(.system(size: 11, weight: .semibold))
