@@ -3,20 +3,17 @@ import SwiftUI
 struct SearchView: View {
     @State private var query = ""
     @State private var results: [ScrapedTorrent] = []
+    @State private var allResults: [ScrapedTorrent] = []
     @State private var isLoading = false
+    @State private var isLoadingMore = false
     @State private var state: SearchState = .idle
-    @State private var bookmarks: [String] = []
+    @State private var bookmarks: Set<String> = []
     @State private var selectedTorrent: ScrapedTorrent?
     @State private var showMediaViewer = false
     @State private var mediaViewerIndex = 0
+    @State private var lastPage = 1
 
-    enum SearchState {
-        case idle
-        case loading
-        case results
-        case empty
-        case error(String)
-    }
+    enum SearchState { case idle, loading, results, empty, error(String) }
 
     @State private var searchTask: Task<Void, Never>?
     @State private var searchIconTapCount = 0
@@ -26,59 +23,31 @@ struct SearchView: View {
         NavigationStack {
             ZStack {
                 AppColors.groupedBg.ignoresSafeArea()
-
                 switch state {
-                case .idle:
-                    idleView
-                case .loading:
-                    VStack {
-                        ProgressView()
-                            .tint(AppColors.accent)
-                        Text("搜索中...")
-                            .subtitle()
-                            .padding(.top, 12)
-                    }
-                case .results:
-                    resultsGrid
-                case .empty:
-                    VStack(spacing: 12) {
-                        Image(systemName: "magnifyingglass")
-                            .font(.system(size: 48))
-                            .foregroundColor(AppColors.placeholder)
-                        Text("未找到结果")
-                            .subtitle()
-                    }
-                case .error(let msg):
-                    VStack(spacing: 12) {
-                        Image(systemName: "exclamationmark.triangle")
-                            .font(.system(size: 48))
-                            .foregroundColor(AppColors.danger)
-                        Text(msg)
-                            .subtitle(AppColors.danger)
-                    }
+                case .idle: idleView
+                case .loading: loadingView
+                case .results: resultsView
+                case .empty: emptyHint("未找到结果", icon: "magnifyingglass")
+                case .error(let m): emptyHint(m, icon: "exclamationmark.triangle", isError: true)
                 }
             }
             .navigationTitle("搜索")
-            .onAppear { loadBookmarks() }
-            .sheet(item: $selectedTorrent) { torrent in
-                TorrentDetailSheet(torrent: torrent)
-            }
-            .fullScreenCover(isPresented: $showEasterEgg) {
-                EasterEggView()
-            }
+            .onAppear { loadBookmarks(); if allResults.isEmpty { loadLatest() } }
+            .sheet(item: $selectedTorrent) { TorrentDetailSheet(torrent: $0, bookmarks: $bookmarks, onChanged: saveBookmarks) }
+            .fullScreenCover(isPresented: $showEasterEgg) { EasterEggView() }
             .fullScreenCover(isPresented: $showMediaViewer) {
-                if let thumb = selectedTorrent?.thumbnail {
-                    MediaViewer(images: [thumb], initialIndex: 0)
+                let imgs = results.map { $0.thumbnail ?? "" }.filter { !$0.isEmpty }
+                if !imgs.isEmpty {
+                    MediaViewer(images: imgs, initialIndex: mediaViewerIndex)
                 }
             }
-            .safeAreaInset(edge: .top, spacing: 0) {
-                searchBar
-            }
+            .safeAreaInset(edge: .top, spacing: 0) { searchBar }
         }
     }
 
+    // MARK: - Search Bar
     private var searchBar: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 0) {
             HStack(spacing: 8) {
                 HStack {
                     Image(systemName: "magnifyingglass")
@@ -89,100 +58,143 @@ struct SearchView: View {
                                 searchIconTapCount = 0
                                 showEasterEgg = true
                             }
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                                searchIconTapCount = 0
-                            }
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { searchIconTapCount = 0 }
                         }
                     TextField("搜索 torrent...", text: $query)
                         .bodyFont()
                         .autocapitalization(.none)
-                        .onChange(of: query) { _ in
-                            debounceSearch()
-                        }
+                        .onChange(of: query) { _ in debounceSearch() }
                     if !query.isEmpty {
-                        Button {
-                            query = ""
-                            results = []
-                            state = .idle
-                        } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .foregroundColor(AppColors.tertiaryLabel)
+                        Button { query = ""; results = []; allResults = []; state = .idle } label: {
+                            Image(systemName: "xmark.circle.fill").foregroundColor(AppColors.tertiaryLabel)
                         }
                     }
                 }
                 .padding(10)
-                .background(
-                    RoundedRectangle(cornerRadius: 10)
-                        .fill(AppColors.card)
-                )
+                .background(RoundedRectangle(cornerRadius: 10).fill(AppColors.card))
 
                 Button {
                     loadBookmarks()
                 } label: {
                     Image(systemName: bookmarks.isEmpty ? "heart" : "heart.fill")
-                        .foregroundColor(AppColors.accent)
-                        .font(.title3)
+                        .foregroundColor(AppColors.accent).font(.title3)
                 }
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
+
+            if case .results = state, !results.isEmpty {
+                HStack {
+                    Image(systemName: "doc.text").font(.caption2).foregroundColor(AppColors.tertiaryLabel)
+                    Text(query.isEmpty ? "\(results.count) 条结果" : "「\(query)」· \(results.count) 条")
+                        .font(.caption2).foregroundColor(AppColors.tertiaryLabel)
+                    Spacer()
+                }
+                .padding(.horizontal, 20)
+                .padding(.bottom, 6)
+            }
         }
         .background(AppColors.groupedBg)
     }
 
+    // MARK: - Idle / Trending
     private var idleView: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("浏览热门")
-                .sectionHeader()
-                .padding(.horizontal, 36)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                HStack {
+                    Image(systemName: "flame.fill").foregroundColor(AppColors.warning)
+                    Text("浏览热门").sectionHeader()
+                }
+                .padding(.horizontal, 20)
                 .padding(.top, 16)
 
-            if !bookmarks.isEmpty {
-                Section("收藏") {
-                    // Bookmark list would go here
+                Text("搜索番号或名称")
+                    .subtitle(AppColors.tertiaryLabel)
+                    .padding(.horizontal, 20)
+
+                if results.isEmpty {
+                    gridSkeleton
+                } else {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 160, maximum: 170))], spacing: 12) {
+                        ForEach(results) { torrent in
+                            TorrentCard(torrent: torrent, isBookmarked: bookmarks.contains(torrent.code))
+                                .onTapGesture { selectedTorrent = torrent }
+                                .contextMenu { cardContextMenu(torrent) }
+                        }
+                    }
+                    .padding(.horizontal, 12)
                 }
             }
-
-            Spacer()
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .refreshable { await refreshSearch() }
     }
 
-    private var resultsGrid: some View {
+    // MARK: - Loading
+    private var loadingView: some View {
+        VStack(spacing: 8) {
+            HStack(spacing: 8) {
+                ProgressView().tint(AppColors.accent)
+                Text("正在获取最新资源...").subtitle(AppColors.tertiaryLabel)
+            }
+            .padding(.top, 16)
+            gridSkeleton
+        }
+    }
+
+    // MARK: - Results
+    private var resultsView: some View {
         ScrollView {
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 160, maximum: 170))], spacing: 12) {
                 ForEach(results) { torrent in
                     TorrentCard(torrent: torrent, isBookmarked: bookmarks.contains(torrent.code))
-                        .onTapGesture {
-                            selectedTorrent = torrent
-                        }
-                        .contextMenu {
-                            Button {
-                                addMagnet(torrent)
-                            } label: {
-                                Label("添加到队列", systemImage: "square.and.arrow.down")
-                            }
-                            Button {
-                                toggleBookmark(torrent)
-                            } label: {
-                                Label(
-                                    bookmarks.contains(torrent.code) ? "取消收藏" : "收藏",
-                                    systemImage: bookmarks.contains(torrent.code) ? "heart.fill" : "heart"
-                                )
-                            }
-                            Button {
-                                UIPasteboard.general.string = torrent.magnet
-                            } label: {
-                                Label("复制 Magnet", systemImage: "doc.on.doc")
-                            }
-                        }
+                        .onTapGesture { selectedTorrent = torrent }
+                        .contextMenu { cardContextMenu(torrent) }
                 }
             }
             .padding(.horizontal, 12)
             .padding(.top, 8)
+
+            if !results.isEmpty {
+                VStack(spacing: 4) {
+                    if isLoadingMore {
+                        ProgressView().tint(AppColors.accent)
+                    } else if results.count >= 20 {
+                        Text("上滑加载更多").font(.caption).foregroundColor(AppColors.tertiaryLabel)
+                    }
+                }
+                .padding(.vertical, 20)
+            }
         }
-        .refreshable {
-            await search()
+        .refreshable { await refreshSearch() }
+    }
+
+    // MARK: - Context Menu
+    private func cardContextMenu(_ torrent: ScrapedTorrent) -> some View {
+        Group {
+            Button { addMagnet(torrent) } label: { Label("添加到队列", systemImage: "square.and.arrow.down") }
+            Button { toggleBookmark(torrent) } label: {
+                Label(bookmarks.contains(torrent.code) ? "取消收藏" : "收藏",
+                      systemImage: bookmarks.contains(torrent.code) ? "heart.fill" : "heart")
+            }
+            Button { UIPasteboard.general.string = torrent.magnet } label: { Label("复制 Magnet", systemImage: "doc.on.doc") }
+        }
+    }
+
+    // MARK: - Data
+    private func loadLatest() {
+        Task {
+            state = .loading
+            do {
+                let items = try await TorrentSearchService.shared.trending(pages: 2)
+                await MainActor.run {
+                    allResults = items
+                    results = items
+                    lastPage = 2
+                    state = items.isEmpty ? .idle : .results
+                }
+            } catch {
+                await MainActor.run { state = .idle }
+            }
         }
     }
 
@@ -190,125 +202,148 @@ struct SearchView: View {
         searchTask?.cancel()
         searchTask = Task {
             try? await Task.sleep(nanoseconds: 400_000_000)
-            if !Task.isCancelled {
-                await search()
-            }
+            if !Task.isCancelled { await runSearch() }
         }
     }
 
-    private func search() async {
-        guard !query.trimmingCharacters(in: .whitespaces).isEmpty else {
-            await MainActor.run {
-                results = []
-                state = .idle
-            }
-            return
-        }
+    private func runSearch() async {
+        let q = query.trimmingCharacters(in: .whitespaces)
+        if q.isEmpty { await MainActor.run { state = .idle }; return }
 
         await MainActor.run { state = .loading }
-
         do {
-            let scraped = try await TorrentSearchService.shared.search(query: query)
+            let items = try await TorrentSearchService.shared.search(query: q, pages: 5)
             await MainActor.run {
-                results = scraped
-                state = scraped.isEmpty ? .empty : .results
+                allResults = items
+                results = items
+                lastPage = 5
+                state = items.isEmpty ? .empty : .results
             }
         } catch {
             await MainActor.run { state = .error(error.localizedDescription) }
         }
     }
 
+    @Sendable private func refreshSearch() async {
+        let q = query.trimmingCharacters(in: .whitespaces)
+        if q.isEmpty { return }
+        do {
+            let items = try await TorrentSearchService.shared.search(query: q, pages: 3)
+            await MainActor.run {
+                allResults = items
+                results = items
+                lastPage = 3
+                state = items.isEmpty ? .empty : .results
+            }
+        } catch {}
+    }
+
     private func addMagnet(_ torrent: ScrapedTorrent) {
-        Task {
-            try? await QBitApi.shared.addMagnet([torrent.magnet])
-        }
+        Task { try? await QBitApi.shared.addMagnet([torrent.magnet]) }
     }
 
     private func toggleBookmark(_ torrent: ScrapedTorrent) {
-        let isNow = PersistenceService.shared.toggleBookmark(torrent.code)
-        loadBookmarks()
+        if bookmarks.contains(torrent.code) { bookmarks.remove(torrent.code) }
+        else { bookmarks.insert(torrent.code) }
+        saveBookmarks()
     }
 
     private func loadBookmarks() {
-        bookmarks = PersistenceService.shared.loadBookmarks()
+        bookmarks = Set(PersistenceService.shared.loadBookmarks())
+    }
+
+    private func saveBookmarks() {
+        PersistenceService.shared.saveBookmarks(Array(bookmarks))
+    }
+
+    // MARK: - Shared Components
+    private func emptyHint(_ text: String, icon: String, isError: Bool = false) -> some View {
+        VStack(spacing: 12) {
+            Image(systemName: icon).font(.system(size: 48))
+                .foregroundColor(isError ? AppColors.danger : AppColors.placeholder)
+            Text(text).subtitle(isError ? AppColors.danger : AppColors.secondaryLabel)
+        }
+    }
+
+    private var gridSkeleton: some View {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 160, maximum: 170))], spacing: 12) {
+            ForEach(0..<6, id: \.self) { _ in
+                RoundedRectangle(cornerRadius: 10).fill(AppColors.card).frame(height: 200)
+            }
+        }
+        .padding(.horizontal, 12)
     }
 }
 
+// MARK: - Torrent Card
 private struct TorrentCard: View {
     let torrent: ScrapedTorrent
     let isBookmarked: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        TweenAnimationBuilder { value in
             ZStack(alignment: .bottomLeading) {
                 AsyncImage(url: URL(string: torrent.thumbnail ?? "")) { phase in
                     switch phase {
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
+                    case .success(let img):
+                        img.resizable().aspectRatio(contentMode: .fill)
                     case .failure, .empty:
-                        Rectangle()
-                            .fill(AppColors.card)
-                            .overlay {
-                                Image(systemName: "photo")
-                                    .foregroundColor(AppColors.placeholder)
-                            }
-                    @unknown default:
-                        Rectangle().fill(AppColors.card)
+                        Rectangle().fill(AppColors.card).overlay {
+                            Image(systemName: "photo").foregroundColor(AppColors.placeholder)
+                        }
+                    @unknown default: Rectangle().fill(AppColors.card)
                     }
                 }
-                .frame(height: 120)
-                .clipped()
+                .frame(height: 160).clipped()
 
-                LinearGradient(
-                    colors: [.clear, .black.opacity(0.6)],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
+                LinearGradient(colors: [.clear, .black.opacity(0.7)], startPoint: .top, endPoint: .bottom)
 
-                HStack {
-                    Text(torrent.size)
-                        .caption(.white)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 4))
-                    Spacer()
-                    if isBookmarked {
-                        Image(systemName: "heart.fill")
-                            .font(.caption2)
-                            .foregroundColor(AppColors.accent)
-                    }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(torrent.code).font(.system(size: 14, weight: .bold))
+                        .foregroundColor(.white).lineLimit(1)
+                    Text(torrent.size).font(.system(size: 11))
+                        .foregroundColor(.white.opacity(0.7))
                 }
-                .padding(6)
+                .padding(8)
+
+                if isBookmarked {
+                    Image(systemName: "heart.fill").font(.system(size: 10))
+                        .foregroundColor(AppColors.danger)
+                        .padding(6).background(Circle().fill(.ultraThinMaterial))
+                        .padding(6).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                }
 
                 if !torrent.date.isEmpty {
-                    Text(torrent.date)
-                        .caption(.white.opacity(0.8))
-                        .padding(6)
-                        .frame(maxWidth: .infinity, alignment: .trailing)
-                        .offset(y: -24)
+                    Text(torrent.date).font(.system(size: 9))
+                        .foregroundColor(.white.opacity(0.8))
+                        .padding(.horizontal, 6).padding(.vertical, 2)
+                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 4))
+                        .padding(6).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
                 }
             }
-
-            Text(torrent.title)
-                .subtitle()
-                .lineLimit(2)
-                .padding(8)
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .opacity(value).offset(y: 15 * (1 - value))
         }
-        .background(
-            RoundedRectangle(cornerRadius: 10)
-                .fill(AppColors.card)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 10))
     }
 }
 
+private struct TweenAnimationBuilder<Content: View>: View {
+    @State private var anim = false
+    let content: (Double) -> Content
+    var body: some View {
+        content(anim ? 1 : 0)
+            .onAppear { withAnimation(.easeOut(duration: 0.3)) { anim = true } }
+    }
+}
+
+// MARK: - Detail Sheet
 private struct TorrentDetailSheet: View {
     let torrent: ScrapedTorrent
+    @Binding var bookmarks: Set<String>
+    let onChanged: () -> Void
     @Environment(\.dismiss) private var dismiss
-
     @State private var translatedDescription: String?
+    @State private var showMediaViewer = false
 
     var body: some View {
         NavigationStack {
@@ -317,67 +352,65 @@ private struct TorrentDetailSheet: View {
                     if let thumb = torrent.thumbnail {
                         AsyncImage(url: URL(string: thumb)) { phase in
                             switch phase {
-                            case .success(let image):
-                                image
-                                    .resizable()
-                                    .aspectRatio(contentMode: .fit)
-                                    .frame(maxHeight: 250)
+                            case .success(let img):
+                                img.resizable().aspectRatio(contentMode: .fit).frame(maxHeight: 250)
                                     .clipShape(RoundedRectangle(cornerRadius: 12))
+                                    .onTapGesture { showMediaViewer = true }
                             default:
-                                Rectangle()
-                                    .fill(AppColors.card)
-                                    .frame(height: 200)
+                                Rectangle().fill(AppColors.card).frame(height: 200)
                             }
                         }
                     }
 
-                    Text(torrent.title)
-                        .cardTitle()
+                    Text(torrent.code).cardTitle()
+                    if torrent.title != torrent.code {
+                        Text(torrent.title).subtitle(AppColors.tertiaryLabel)
+                    }
 
                     HStack(spacing: 16) {
-                        Label(torrent.size, systemImage: "doc")
-                            .caption()
-                        Label(torrent.date, systemImage: "calendar")
-                            .caption()
+                        Label(torrent.size, systemImage: "doc").caption()
+                        Label(torrent.date, systemImage: "calendar").caption()
                     }
 
                     if let desc = translatedDescription ?? torrent.description {
-                        Text(desc)
-                            .subtitle()
-                            .textSelection(.enabled)
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(desc).subtitle().textSelection(.enabled)
+                            if translatedDescription != nil, let raw = torrent.description {
+                                Divider().background(AppColors.separator)
+                                HStack {
+                                    Image(systemName: "doc.text").font(.caption2).foregroundColor(AppColors.tertiaryLabel)
+                                    Text("原文（日文）").font(.caption2).foregroundColor(AppColors.tertiaryLabel)
+                                }
+                                Text(raw).subtitle().textSelection(.enabled)
+                            }
+                        }
+                        .padding(14)
+                        .background(RoundedRectangle(cornerRadius: 10).fill(AppColors.card))
                     }
 
-                    HStack(spacing: 12) {
+                    VStack(spacing: 10) {
                         Button {
-                            Task {
-                                try? await QBitApi.shared.addMagnet([torrent.magnet])
-                                dismiss()
-                            }
+                            Task { try? await QBitApi.shared.addMagnet([torrent.magnet]); dismiss() }
                         } label: {
                             Label("添加到队列", systemImage: "square.and.arrow.down")
-                                .bodyFont(.white)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 12)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 14)
-                                        .fill(AppColors.accent)
-                                )
+                                .bodyFont(.white).frame(maxWidth: .infinity).padding(.vertical, 14)
+                                .background(RoundedRectangle(cornerRadius: 14).fill(AppColors.accent))
                         }
 
-                        Button {
-                            UIPasteboard.general.string = torrent.magnet
-                        } label: {
-                            Image(systemName: "doc.on.doc")
-                                .font(.title3)
-                                .foregroundColor(AppColors.accent)
-                                .frame(width: 44, height: 44)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 14)
-                                        .stroke(AppColors.accent, lineWidth: 1)
-                                )
+                        Button { UIPasteboard.general.string = torrent.magnet } label: {
+                            Label("复制磁力链接", systemImage: "doc.on.doc")
+                                .bodyFont(AppColors.accent).frame(maxWidth: .infinity).padding(.vertical, 12)
+                                .background(RoundedRectangle(cornerRadius: 14).stroke(AppColors.accent, lineWidth: 1))
+                        }
+
+                        if let torrentUrl = torrent.torrentUrl {
+                            Button { downloadTorrent(torrentUrl) } label: {
+                                Label("下载 .torrent 文件", systemImage: "arrow.down.doc")
+                                    .bodyFont(AppColors.accent).frame(maxWidth: .infinity).padding(.vertical, 12)
+                                    .background(RoundedRectangle(cornerRadius: 14).stroke(AppColors.accent, lineWidth: 1))
+                            }
                         }
                     }
-                    .padding(.top, 8)
                 }
                 .padding(16)
             }
@@ -385,14 +418,22 @@ private struct TorrentDetailSheet: View {
             .navigationTitle("详情")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("关闭") { dismiss() }
+                ToolbarItem(placement: .cancellationAction) { Button("关闭") { dismiss() } }
+                ToolbarItem(placement: .primaryAction) {
+                    Button { toggleBookmark() } label: {
+                        Image(systemName: bookmarks.contains(torrent.code) ? "heart.fill" : "heart")
+                            .foregroundColor(bookmarks.contains(torrent.code) ? AppColors.danger : AppColors.tertiaryLabel)
+                    }
                 }
             }
         }
-        .onAppear {
-            translate()
-        }
+        .onAppear { translate() }
+    }
+
+    private func toggleBookmark() {
+        if bookmarks.contains(torrent.code) { bookmarks.remove(torrent.code) }
+        else { bookmarks.insert(torrent.code) }
+        onChanged()
     }
 
     private func translate() {
@@ -402,8 +443,27 @@ private struct TorrentDetailSheet: View {
             await MainActor.run { translatedDescription = translated }
         }
     }
+
+    private func downloadTorrent(_ urlStr: String) {
+        guard let url = URL(string: urlStr.hasPrefix("http") ? urlStr : "https://www.141ppv.com\(urlStr)") else { return }
+        Task {
+            do {
+                let (data, _) = try await URLSession.shared.data(from: url)
+                let temp = FileManager.default.temporaryDirectory.appendingPathComponent(url.lastPathComponent)
+                try data.write(to: temp)
+                await MainActor.run {
+                    let av = UIActivityViewController(activityItems: [temp], applicationActivities: nil)
+                    if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+                       let root = scene.windows.first?.rootViewController {
+                        root.present(av, animated: true)
+                    }
+                }
+            } catch {}
+        }
+    }
 }
 
+// MARK: - Easter Egg
 private struct EasterEggView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var results: [ScrapedTorrent] = []
@@ -413,22 +473,18 @@ private struct EasterEggView: View {
         NavigationStack {
             ZStack {
                 AppColors.mainBg.ignoresSafeArea()
-
                 if isLoading {
                     VStack(spacing: 12) {
                         SkeletonBar(height: 80)
                         SkeletonBar(height: 80)
                         SkeletonBar(height: 80)
                     }
-                    .padding(.horizontal, 20)
-                    .padding(.top, 20)
+                    .padding(.horizontal, 20).padding(.top, 20)
                 } else if results.isEmpty {
                     VStack(spacing: 12) {
                         Image(systemName: "antenna.radiowaves.left.and.right")
-                            .font(.system(size: 48))
-                            .foregroundColor(AppColors.placeholder)
-                        Text("没有抓到数据")
-                            .foregroundColor(AppColors.secondaryLabel)
+                            .font(.system(size: 48)).foregroundColor(AppColors.placeholder)
+                        Text("没有抓到数据").foregroundColor(AppColors.secondaryLabel)
                     }
                 } else {
                     ScrollView {
@@ -437,16 +493,10 @@ private struct EasterEggView: View {
                                 TorrentCard(torrent: torrent, isBookmarked: false)
                             }
                         }
-                        .padding(.horizontal, 12)
-                        .padding(.top, 8)
-
+                        .padding(.horizontal, 12).padding(.top, 8)
                         VStack(spacing: 4) {
-                            Text("TorrentSearchService 正在工作")
-                                .font(.caption)
-                                .foregroundColor(AppColors.secondaryLabel)
-                            Text("141ppv · 共 \(results.count) 条")
-                                .font(.caption2)
-                                .foregroundColor(AppColors.tertiaryLabel)
+                            Text("TorrentSearchService 正在工作").font(.caption).foregroundColor(AppColors.secondaryLabel)
+                            Text("141ppv · 共 \(results.count) 条").font(.caption2).foregroundColor(AppColors.tertiaryLabel)
                         }
                         .padding(.vertical, 20)
                     }
@@ -455,21 +505,14 @@ private struct EasterEggView: View {
             .navigationTitle("🔍 秘密探索")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("关闭") { dismiss() }
-                }
+                ToolbarItem(placement: .cancellationAction) { Button("关闭") { dismiss() } }
             }
         }
         .task {
             do {
                 let scraped = try await TorrentSearchService.shared.trending(pages: 2)
-                await MainActor.run {
-                    results = scraped
-                    isLoading = false
-                }
-            } catch {
-                await MainActor.run { isLoading = false }
-            }
+                await MainActor.run { results = scraped; isLoading = false }
+            } catch { await MainActor.run { isLoading = false } }
         }
     }
 }
