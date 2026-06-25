@@ -23,7 +23,8 @@ actor UpdateService {
 
         do {
             guard let release = try await fetchLatest() else {
-                return .failed(currentVersion, error: "No release found")
+                PersistenceService.shared.lastUpdateCheckTime = Date()
+                return .upToDate(currentVersion)
             }
 
             PersistenceService.shared.lastUpdateCheckTime = Date()
@@ -45,8 +46,15 @@ actor UpdateService {
         var req = URLRequest(url: url)
         req.setValue("application/vnd.github.v3+json", forHTTPHeaderField: "Accept")
 
-        let (data, _) = try await session.data(for: req)
-        return try? JSONDecoder().decode(AppRelease.self, from: data)
+        let (data, response) = try await session.data(for: req)
+
+        guard let httpResp = response as? HTTPURLResponse else { return nil }
+        if httpResp.statusCode == 404 { return nil }
+        guard httpResp.statusCode == 200 else {
+            throw UpdateError.fetchFailed("HTTP \(httpResp.statusCode)")
+        }
+
+        return try JSONDecoder().decode(AppRelease.self, from: data)
     }
 
     func downloadIpa(_ release: AppRelease, progressHandler: ((Double) -> Void)? = nil) async throws -> URL {
@@ -85,11 +93,13 @@ actor UpdateService {
 enum UpdateError: LocalizedError {
     case noIpaUrl
     case downloadFailed
+    case fetchFailed(String)
 
     var errorDescription: String? {
         switch self {
         case .noIpaUrl: return "No .ipa URL found in release"
         case .downloadFailed: return "Download failed"
+        case .fetchFailed(let msg): return msg
         }
     }
 }
