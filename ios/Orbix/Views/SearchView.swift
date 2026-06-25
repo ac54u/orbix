@@ -298,7 +298,7 @@ private struct TorrentCard: View {
 
                     LinearGradient(colors: [.clear, .black.opacity(0.6)],
                                    startPoint: .top, endPoint: .bottom)
-                        .frame(height: 80)
+                        .frame(height: 100)
                         .frame(maxHeight: .infinity, alignment: .bottom)
 
                     VStack(alignment: .leading, spacing: 2) {
@@ -308,6 +308,12 @@ private struct TorrentCard: View {
                         Text(torrent.size)
                             .font(.system(size: 11))
                             .foregroundColor(.white.opacity(0.7))
+                        if let desc = torrent.description, !desc.isEmpty {
+                            Text(desc)
+                                .font(.system(size: 9))
+                                .foregroundColor(.white.opacity(0.6))
+                                .lineLimit(1)
+                        }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 10)
@@ -385,6 +391,44 @@ private struct TorrentDetailSheet: View {
                         }
                         .padding(14)
                         .background(RoundedRectangle(cornerRadius: 10).fill(AppColors.card))
+                    }
+
+                    VStack(spacing: 12) {
+                        VStack(spacing: 4) {
+                            HStack {
+                                Image(systemName: "tag").font(.caption2).foregroundColor(AppColors.tertiaryLabel)
+                                Text("番号").font(.caption2).foregroundColor(AppColors.tertiaryLabel)
+                                Spacer()
+                            }
+                            HStack {
+                                Text(torrent.code).font(.system(size: 13, design: .monospaced)).foregroundColor(AppColors.label)
+                                Spacer()
+                                Button { UIPasteboard.general.string = torrent.code } label: {
+                                    Image(systemName: "doc.on.doc").font(.caption2).foregroundColor(AppColors.accent)
+                                }
+                            }
+                        }
+                        .padding(10)
+                        .background(RoundedRectangle(cornerRadius: 8).fill(AppColors.card))
+
+                        if let pageUrl = torrent.pageUrl {
+                            VStack(spacing: 4) {
+                                HStack {
+                                    Image(systemName: "link").font(.caption2).foregroundColor(AppColors.tertiaryLabel)
+                                    Text("页面链接").font(.caption2).foregroundColor(AppColors.tertiaryLabel)
+                                    Spacer()
+                                }
+                                HStack {
+                                    Text(pageUrl).font(.system(size: 11, design: .monospaced)).foregroundColor(AppColors.accent).lineLimit(1)
+                                    Spacer()
+                                    Button { UIPasteboard.general.string = pageUrl } label: {
+                                        Image(systemName: "doc.on.doc").font(.caption2).foregroundColor(AppColors.accent)
+                                    }
+                                }
+                            }
+                            .padding(10)
+                            .background(RoundedRectangle(cornerRadius: 8).fill(AppColors.card))
+                        }
                     }
 
                     VStack(spacing: 10) {
