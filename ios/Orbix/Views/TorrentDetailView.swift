@@ -9,6 +9,11 @@ struct TorrentDetailView: View {
     @State private var files: [TorrentFile] = []
     @State private var showDeleteConfirmation = false
     @State private var isLoading = true
+    @State private var processingAction: ActionType? = nil
+
+    enum ActionType {
+        case pause, force, recheck, announce
+    }
 
     private let timer = Timer.publish(every: 2, on: .main, in: .common).autoconnect()
 
@@ -152,25 +157,29 @@ struct TorrentDetailView: View {
                 icon: torrent.statusBadge.isPaused ? "play.fill" : "pause.fill",
                 label: torrent.statusBadge.isPaused ? "启动" : "暂停",
                 color: torrent.statusBadge.isPaused ? AppColors.success : AppColors.warning,
-                action: { togglePause(torrent) }
+                isLoading: processingAction == .pause,
+                action: { performAction(.pause, torrent: torrent) }
             )
             ActionTile(
                 icon: "bolt.fill",
                 label: "强制",
                 color: AppColors.accent,
-                action: { forceStart(torrent) }
+                isLoading: processingAction == .force,
+                action: { performAction(.force, torrent: torrent) }
             )
             ActionTile(
                 icon: "checkmark.shield.fill",
                 label: "校验",
                 color: AppColors.accent,
-                action: { recheck(torrent) }
+                isLoading: processingAction == .recheck,
+                action: { performAction(.recheck, torrent: torrent) }
             )
             ActionTile(
                 icon: "antenna.radiowaves.left.and.right",
                 label: "汇报",
                 color: AppColors.accent,
-                action: { reannounce(torrent) }
+                isLoading: processingAction == .announce,
+                action: { performAction(.announce, torrent: torrent) }
             )
         }
     }
@@ -397,26 +406,40 @@ struct TorrentDetailView: View {
         }
     }
 
-    private func togglePause(_ torrent: TorrentInfo) {
+    private func performAction(_ type: ActionType, torrent: TorrentInfo) {
+        guard processingAction == nil else { return }
+        processingAction = type
+
         Task {
-            if torrent.statusBadge.isPaused {
-                try? await QBitApi.shared.startTorrent(hash)
-            } else {
-                try? await QBitApi.shared.stopTorrent(hash)
+            do {
+                switch type {
+                case .pause:
+                    if torrent.statusBadge.isPaused {
+                        try await QBitApi.shared.startTorrent(hash)
+                    } else {
+                        try await QBitApi.shared.stopTorrent(hash)
+                    }
+                case .force:
+                    try await QBitApi.shared.forceStartTorrent(hash)
+                case .recheck:
+                    try await QBitApi.shared.recheckTorrent(hash)
+                case .announce:
+                    try await QBitApi.shared.reannounceTorrent(hash)
+                }
+
+                let generator = UINotificationFeedbackGenerator()
+                generator.notificationOccurred(.success)
+
+                await manualRefresh()
+            } catch {
+                let generator = UINotificationFeedbackGenerator()
+                generator.notificationOccurred(.error)
+            }
+
+            await MainActor.run {
+                processingAction = nil
             }
         }
-    }
-
-    private func forceStart(_ torrent: TorrentInfo) {
-        Task { try? await QBitApi.shared.forceStartTorrent(hash) }
-    }
-
-    private func recheck(_ torrent: TorrentInfo) {
-        Task { try? await QBitApi.shared.recheckTorrent(hash) }
-    }
-
-    private func reannounce(_ torrent: TorrentInfo) {
-        Task { try? await QBitApi.shared.reannounceTorrent(hash) }
     }
 
     private func delete(_ deleteFiles: Bool) {
@@ -498,18 +521,29 @@ private struct ActionTile: View {
     let icon: String
     let label: String
     let color: Color
+    let isLoading: Bool
     let action: () -> Void
 
     var body: some View {
         Button(action: {
-            let impact = UIImpactFeedbackGenerator(style: .medium)
-            impact.impactOccurred()
-            action()
+            if !isLoading {
+                let impact = UIImpactFeedbackGenerator(style: .medium)
+                impact.impactOccurred()
+                action()
+            }
         }) {
             VStack(spacing: 8) {
-                Image(systemName: icon)
-                    .font(.system(size: 20, weight: .semibold))
-                    .foregroundColor(color)
+                if isLoading {
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: color))
+                        .frame(height: 20)
+                } else {
+                    Image(systemName: icon)
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundColor(color)
+                        .frame(height: 20)
+                }
+
                 Text(label)
                     .font(.system(size: 13, weight: .medium))
                     .foregroundColor(AppColors.label)
@@ -522,6 +556,7 @@ private struct ActionTile: View {
             )
         }
         .buttonStyle(ScaleButtonStyle())
+        .disabled(isLoading)
     }
 }
 
