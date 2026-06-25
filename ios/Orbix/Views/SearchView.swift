@@ -13,6 +13,7 @@ struct SearchView: View {
     @State private var mediaViewerIndex = 0
     @State private var currentPage = 1
     @State private var hasMorePages = true
+    @State private var visibleItemID: String?
 
     enum SearchState { case idle, loading, results, empty, error(String) }
 
@@ -124,61 +125,88 @@ struct SearchView: View {
     }
 
     // MARK: - Results
-    private var sections: [(date: String, items: [ScrapedTorrent])] {
-        var dict = [String: [ScrapedTorrent]]()
-        var order: [String] = []
-        for item in results {
-            if dict[item.date] == nil { order.append(item.date) }
-            dict[item.date, default: []].append(item)
+    private var sortedResults: [ScrapedTorrent] {
+        results.sorted { a, b in
+            let da = parseDate(a.date) ?? .distantPast
+            let db = parseDate(b.date) ?? .distantPast
+            return da > db
         }
-        return order.map { (date: $0, items: dict[$0]!) }
+    }
+
+    private var currentVisibleDate: String? {
+        guard let id = visibleItemID,
+              let item = sortedResults.first(where: { $0.id == id }) else { return nil }
+        return item.date
     }
 
     private var resultsView: some View {
         ScrollView {
-            LazyVStack(spacing: 0, pinnedViews: .sectionHeaders) {
-                ForEach(sections, id: \.date) { section in
-                    Section {
-                        LazyVGrid(columns: gridColumns, spacing: 1) {
-                            ForEach(section.items) { torrent in
-                                TorrentCard(torrent: torrent)
-                                    .onTapGesture { selectedTorrent = torrent }
-                                    .contextMenu { cardContextMenu(torrent) }
-                            }
-                        }
-                    } header: {
-                        HStack {
-                            Text(section.date)
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundColor(AppColors.secondaryLabel)
-                            Spacer()
-                        }
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 10)
-                        .background(.ultraThinMaterial)
-                    }
+            LazyVGrid(columns: gridColumns, spacing: 1) {
+                ForEach(sortedResults) { torrent in
+                    TorrentCard(torrent: torrent)
+                        .onTapGesture { selectedTorrent = torrent }
+                        .contextMenu { cardContextMenu(torrent) }
                 }
+            }
+            .padding(.top, 1)
 
-                if !results.isEmpty {
-                    VStack(spacing: 4) {
-                        if isLoadingMore {
-                            ProgressView().tint(AppColors.accent)
-                        } else if hasMorePages {
-                            Color.clear
-                                .frame(height: 1)
-                                .onAppear { loadMore() }
-                        } else {
-                            Text("— 已加载全部 —")
-                                .font(.caption)
-                                .foregroundColor(AppColors.tertiaryLabel)
-                        }
+            if !results.isEmpty {
+                VStack(spacing: 4) {
+                    if isLoadingMore {
+                        ProgressView().tint(AppColors.accent)
+                    } else if hasMorePages {
+                        Color.clear
+                            .frame(height: 1)
+                            .onAppear { loadMore() }
+                    } else {
+                        Text("— 已加载全部 —")
+                            .font(.caption)
+                            .foregroundColor(AppColors.tertiaryLabel)
                     }
-                    .padding(.vertical, 20)
                 }
+                .padding(.vertical, 20)
+            }
+        }
+        .scrollPosition(id: $visibleItemID)
+        .overlay(alignment: .topTrailing) {
+            if let date = currentVisibleDate {
+                Text(date)
+                    .font(.system(size: 10, weight: .semibold, design: .rounded))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .background(
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(.black.opacity(0.65))
+                    )
+                    .padding(.trailing, 4)
+                    .padding(.top, 2)
+                    .transition(.opacity)
             }
         }
         .refreshable { await refreshSearch() }
         .gesture(pinchToZoom)
+    }
+
+    private func parseDate(_ str: String) -> Date? {
+        let trimmed = str.trimmingCharacters(in: .whitespaces)
+        let formats = [
+            "yyyy-MM-dd",
+            "yyyy/MM/dd",
+            "MMM. dd, yyyy",
+            "MMMM dd, yyyy",
+            "MMM dd, yyyy",
+            "MMM. d, yyyy",
+            "MMMM d, yyyy",
+            "d MMM yyyy",
+        ]
+        let fmt = DateFormatter()
+        fmt.locale = Locale(identifier: "en_US_POSIX")
+        for format in formats {
+            fmt.dateFormat = format
+            if let d = fmt.date(from: trimmed) { return d }
+        }
+        return nil
     }
 
     // MARK: - Context Menu
