@@ -205,10 +205,10 @@ struct SearchView: View {
     private func loadLatest() {
         Task {
             state = .loading
-            currentPage = 1
+            currentPage = 3
             hasMorePages = true
             do {
-                let items = try await TorrentSearchService.shared.newTorrents(pages: 1, startPage: 1)
+                let items = try await TorrentSearchService.shared.newTorrents(pages: 3, startPage: 1)
                 await MainActor.run {
                     allResults = items
                     results = items
@@ -252,8 +252,8 @@ struct SearchView: View {
             let items: [ScrapedTorrent]
             let page: Int
             if q.isEmpty {
-                items = try await TorrentSearchService.shared.newTorrents(pages: 1, startPage: 1)
-                page = 1
+                items = try await TorrentSearchService.shared.newTorrents(pages: 3, startPage: 1)
+                page = 3
             } else {
                 items = try await TorrentSearchService.shared.search(query: q, pages: 3, startPage: 1)
                 page = 3
