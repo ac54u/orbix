@@ -115,14 +115,14 @@ struct SearchView: View {
                 if results.isEmpty {
                     gridSkeleton
                 } else {
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 160, maximum: 170))], spacing: 10) {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 160, maximum: 170), spacing: 10)], spacing: 10) {
                         ForEach(results) { torrent in
                             TorrentCard(torrent: torrent, isBookmarked: bookmarks.contains(torrent.code))
                                 .onTapGesture { selectedTorrent = torrent }
                                 .contextMenu { cardContextMenu(torrent) }
                         }
                     }
-                    .padding(.horizontal, 12)
+                    .padding(.horizontal, 16)
                 }
             }
         }
@@ -144,14 +144,14 @@ struct SearchView: View {
     // MARK: - Results
     private var resultsView: some View {
         ScrollView {
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 160, maximum: 170))], spacing: 10) {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 160, maximum: 170), spacing: 10)], spacing: 10) {
                 ForEach(results) { torrent in
                     TorrentCard(torrent: torrent, isBookmarked: bookmarks.contains(torrent.code))
                         .onTapGesture { selectedTorrent = torrent }
                         .contextMenu { cardContextMenu(torrent) }
                 }
             }
-            .padding(.horizontal, 12)
+            .padding(.horizontal, 16)
             .padding(.top, 8)
 
             if !results.isEmpty {
@@ -266,12 +266,12 @@ struct SearchView: View {
     }
 
     private var gridSkeleton: some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 160, maximum: 170))], spacing: 10) {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 160, maximum: 170), spacing: 10)], spacing: 10) {
             ForEach(0..<6, id: \.self) { _ in
-                RoundedRectangle(cornerRadius: 10).fill(AppColors.card).frame(height: 200)
+                RoundedRectangle(cornerRadius: 10).fill(AppColors.card).aspectRatio(0.72, contentMode: .fit)
             }
         }
-        .padding(.horizontal, 12)
+        .padding(.horizontal, 16)
     }
 }
 
@@ -531,12 +531,12 @@ private struct EasterEggView: View {
                     }
                 } else {
                     ScrollView {
-                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 160, maximum: 170))], spacing: 10) {
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 160, maximum: 170), spacing: 10)], spacing: 10) {
                             ForEach(results) { torrent in
                                 TorrentCard(torrent: torrent, isBookmarked: false)
                             }
                         }
-                        .padding(.horizontal, 12).padding(.top, 8)
+                        .padding(.horizontal, 16).padding(.top, 8)
                         VStack(spacing: 4) {
                             Text("TorrentSearchService 正在工作").font(.caption).foregroundColor(AppColors.secondaryLabel)
                             Text("141ppv · 共 \(results.count) 条").font(.caption2).foregroundColor(AppColors.tertiaryLabel)
