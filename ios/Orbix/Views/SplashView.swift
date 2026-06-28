@@ -38,22 +38,27 @@ struct SplashView: View {
     }
 
     private func decideDestination() async {
-        let servers = await QBitApi.shared.loadServers()
-
-        guard !servers.isEmpty else {
+        // 1. No services at all → first launch
+        if CredentialsManager.shared.activeServices.isEmpty {
             onDecision(.welcome)
             return
         }
 
-        if let active = await QBitApi.shared.loadSavedConfig() {
+        // 2. qBittorrent configured → try connect
+        let servers = await QBitApi.shared.loadServers()
+        if !servers.isEmpty, let active = await QBitApi.shared.loadSavedConfig() {
             await QBitApi.shared.setActiveServer(active)
             let result = await QBitApi.shared.connect()
             if result.isSuccess {
                 onDecision(.main)
                 return
             }
+            // qBittorrent failed → show server selection for fix
+            onDecision(.serverSelection)
+            return
         }
 
-        onDecision(.serverSelection)
+        // 3. Other services exist but no qBittorrent → still let user in
+        onDecision(.main)
     }
 }
