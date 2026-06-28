@@ -28,6 +28,18 @@ struct ContentView: View {
                 .sheet(isPresented: $showLoginFromWelcome) {
                     LoginView { config in
                         showLoginFromWelcome = false
+                        // Also sync to CredentialsManager so it survives app restart
+                        let cred = ServiceCredential(
+                            kind: .qBittorrent,
+                            name: config.name,
+                            host: config.host,
+                            port: config.port,
+                            https: config.https,
+                            apiKey: "",
+                            username: config.username,
+                            password: config.password
+                        )
+                        CredentialsManager.shared.save(cred)
                         Task {
                             await QBitApi.shared.setActiveServer(config)
                             _ = await QBitApi.shared.connect()

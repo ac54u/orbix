@@ -38,6 +38,19 @@ struct SplashView: View {
     }
 
     private func decideDestination() async {
+        // Migrate existing qBittorrent servers into CredentialsManager
+        if CredentialsManager.shared.qBittorrent == nil {
+            let servers = await QBitApi.shared.loadServers()
+            if let saved = await QBitApi.shared.loadSavedConfig() ?? servers.first {
+                let cred = ServiceCredential(
+                    kind: .qBittorrent, name: saved.name, host: saved.host,
+                    port: saved.port, https: saved.https, apiKey: "",
+                    username: saved.username, password: saved.password
+                )
+                CredentialsManager.shared.save(cred)
+            }
+        }
+
         // 1. No services at all → first launch
         if CredentialsManager.shared.activeServices.isEmpty {
             onDecision(.welcome)
