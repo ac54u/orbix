@@ -557,7 +557,10 @@ struct TorrentDetailView: View {
             Button("重试") {
                 loadError = nil
                 isLoading = true
-                Task { await refresh() }
+                Task {
+                    await refreshInfoPeers()
+                    await refreshFilesTrackers()
+                }
             }
             .buttonStyle(.borderedProminent)
         }
