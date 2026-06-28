@@ -26,7 +26,9 @@ enum ProwlarrApi {
     @MainActor
     static func search(query: String, indexerIds: [Int] = []) async throws -> [SearchResult] {
         guard let cred = CredentialsManager.shared.prowlarr, !cred.apiKey.isEmpty else { return [] }
-        let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query
+        var allowed = CharacterSet.alphanumerics
+        allowed.insert(charactersIn: "-._~")
+        let encoded = query.addingPercentEncoding(withAllowedCharacters: allowed) ?? query
         guard let url = URL(string: "\(cred.apiURL)/search?query=\(encoded)&type=search") else { return [] }
 
         var req = URLRequest(url: url)
