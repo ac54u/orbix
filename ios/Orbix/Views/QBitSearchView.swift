@@ -150,7 +150,7 @@ struct QBitSearchView: View {
             .sheet(isPresented: $showDownloadSheet) {
                 if let options = addOptions {
                     downloadSheet(options: options)
-                        .presentationDetents([.medium, .large])
+                        .presentationDetents([.large])
                         .presentationDragIndicator(.visible)
                 }
             }
