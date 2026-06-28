@@ -45,6 +45,7 @@ struct QBitSearchView: View {
     @State private var showDownloadSheet = false
     @State private var searchSource: SearchSource = .qBittorrent
     @State private var searchError: String?
+    @StateObject private var searchMode = SearchModeState.shared
 
     @State private var showRadarrSheet = false
     @State private var radarrResult: SearchResult?
@@ -118,6 +119,17 @@ struct QBitSearchView: View {
                 }
             }
             .navigationTitle("探索")
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button {
+                        searchMode.use141.toggle()
+                    } label: {
+                        Image(systemName: "globe")
+                            .foregroundColor(AppColors.accent)
+                            .font(.system(size: 14))
+                    }
+                }
+            }
             .searchable(text: $query, placement: .automatic, prompt: "输入关键字或 Hash...")
             .onChange(of: query) { _, _ in debounceSearch() }
             .onAppear {
