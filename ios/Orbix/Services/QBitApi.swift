@@ -257,6 +257,28 @@ actor QBitApi {
         return json?.keys.sorted() ?? []
     }
 
+    func setFilePriorities(_ hash: String, indices: [Int], priority: Int) async throws {
+        let _ = try await authedPost("/api/v2/torrents/filePrio", body: [
+            "hash": hash,
+            "id": indices.map(String.init).joined(separator: "|"),
+            "priority": "\(priority)"
+        ])
+    }
+
+    func addTrackers(_ hash: String, urls: [String]) async throws {
+        let _ = try await authedPost("/api/v2/torrents/addTrackers", body: [
+            "hash": hash,
+            "urls": urls.joined(separator: "\n")
+        ])
+    }
+
+    func removeTrackers(_ hash: String, urls: [String]) async throws {
+        let _ = try await authedPost("/api/v2/torrents/removeTrackers", body: [
+            "hash": hash,
+            "urls": urls.joined(separator: "|")
+        ])
+    }
+
     // MARK: - Torrent Actions
     func startTorrent(_ hash: String) async throws {
         let _ = try await authedPost("/api/v2/torrents/start", body: ["hashes": hash])

@@ -20,6 +20,10 @@ struct TorrentDetailView: View {
     @State private var newName = ""
     @State private var dlLimitStr = ""
     @State private var ulLimitStr = ""
+    @State private var showFileSheet = false
+    @State private var showTrackerSheet = false
+    @State private var newTrackerURL = ""
+    @State private var selectedFileIndices: Set<Int> = []
 
     enum ActionType {
         case pause, force, recheck, announce
@@ -116,6 +120,16 @@ struct TorrentDetailView: View {
         }
         .sheet(isPresented: $showAdvancedSheet) {
             advancedSheet
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+        }
+        .sheet(isPresented: $showFileSheet) {
+            filePrioritySheet
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+        }
+        .sheet(isPresented: $showTrackerSheet) {
+            trackerSheet
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
         }
@@ -315,7 +329,18 @@ struct TorrentDetailView: View {
 
     private var filesSection: some View {
         VStack(spacing: 0) {
-            SectionHeader(title: "文件 (\(files.count))")
+            HStack {
+                SectionHeader(title: "文件 (\(files.count))")
+                Spacer()
+                Button {
+                    showFileSheet = true
+                } label: {
+                    Text("管理")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundColor(AppColors.accent)
+                }
+                .padding(.trailing, 16)
+            }
             VStack(spacing: 0) {
                 ForEach(files.indices, id: \.self) { index in
                     let file = files[index]
@@ -384,7 +409,18 @@ struct TorrentDetailView: View {
     // MARK: - Trackers Section
     private var trackersSection: some View {
         VStack(spacing: 0) {
-            SectionHeader(title: "Trackers (\(trackers.count))")
+            HStack {
+                SectionHeader(title: "Trackers (\(trackers.count))")
+                Spacer()
+                Button {
+                    showTrackerSheet = true
+                } label: {
+                    Text("管理")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundColor(AppColors.accent)
+                }
+                .padding(.trailing, 16)
+            }
             VStack(spacing: 0) {
                 ForEach(trackers.indices, id: \.self) { index in
                     let tracker = trackers[index]
@@ -847,6 +883,187 @@ struct TorrentDetailView: View {
         Task {
             try? await QBitApi.shared.deleteTorrent(hash, deleteFiles: deleteFiles)
             dismiss()
+        }
+    }
+
+    // MARK: - File Priority Sheet
+    private var filePrioritySheet: some View {
+        NavigationStack {
+            List {
+                ForEach(files.indices, id: \.self) { index in
+                    let file = files[index]
+                    HStack(spacing: 10) {
+                        Image(systemName: selectedFileIndices.contains(index) ? "checkmark.circle.fill" : "circle")
+                            .foregroundColor(selectedFileIndices.contains(index) ? AppColors.accent : AppColors.tertiaryLabel)
+                            .onTapGesture {
+                                if selectedFileIndices.contains(index) {
+                                    selectedFileIndices.remove(index)
+                                } else {
+                                    selectedFileIndices.insert(index)
+                                }
+                            }
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(file.name)
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundColor(AppColors.label)
+                                .lineLimit(2)
+                            Text(formatBytes(file.size))
+                                .font(.system(size: 12))
+                                .foregroundColor(AppColors.secondaryLabel)
+                        }
+
+                        Spacer()
+
+                        priorityBadge(file.priority)
+                    }
+                }
+            }
+            .listStyle(.insetGrouped)
+            .scrollContentBackground(.hidden)
+            .background(AppColors.mainBg)
+            .navigationTitle("文件优先级")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("取消") { showFileSheet = false; selectedFileIndices = [] }
+                        .foregroundColor(AppColors.secondaryLabel)
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    if !selectedFileIndices.isEmpty {
+                        Menu {
+                            Button { setPrio(0) } label: { Label("忽略", systemImage: "nosign") }
+                            Button { setPrio(1) } label: { Label("正常", systemImage: "minus") }
+                            Button { setPrio(6) } label: { Label("高", systemImage: "arrow.up") }
+                            Button { setPrio(7) } label: { Label("最高", systemImage: "arrow.up.to.line") }
+                        } label: {
+                            Text("批量 (\(selectedFileIndices.count))")
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundColor(AppColors.accent)
+                        }
+                    }
+                    Button("完成") { showFileSheet = false; selectedFileIndices = [] }
+                        .fontWeight(.medium)
+                        .foregroundColor(AppColors.accent)
+                }
+            }
+        }
+    }
+
+    private func priorityBadge(_ priority: Int) -> some View {
+        let (label, color): (String, Color) = {
+            switch priority {
+            case 0: return ("忽略", AppColors.secondaryLabel)
+            case 6: return ("高", AppColors.accent)
+            case 7: return ("最高", AppColors.success)
+            default: return ("正常", AppColors.tertiaryLabel)
+            }
+        }()
+        return Text(label)
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundColor(color)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(color.opacity(0.12))
+            )
+    }
+
+    private func setPrio(_ priority: Int) {
+        let indices = Array(selectedFileIndices)
+        Task {
+            try? await QBitApi.shared.setFilePriorities(hash, indices: indices, priority: priority)
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+            // Refresh files
+            if let f = try? await QBitApi.shared.getTorrentFiles(hash) {
+                await MainActor.run { files = f }
+            }
+        }
+    }
+
+    // MARK: - Tracker Management Sheet
+    private var trackerSheet: some View {
+        NavigationStack {
+            List {
+                Section {
+                    HStack(spacing: 8) {
+                        TextField("输入 Tracker URL ...", text: $newTrackerURL)
+                            .font(.system(size: 14, design: .monospaced))
+                            .foregroundColor(AppColors.label)
+                        Button {
+                            guard !newTrackerURL.isEmpty else { return }
+                            let urls = newTrackerURL.components(separatedBy: "\n").filter { !$0.isEmpty }
+                            Task {
+                                try? await QBitApi.shared.addTrackers(hash, urls: urls)
+                                UINotificationFeedbackGenerator().notificationOccurred(.success)
+                                await MainActor.run { newTrackerURL = "" }
+                                if let t = try? await QBitApi.shared.getTorrentTrackers(hash) {
+                                    await MainActor.run { trackers = t }
+                                }
+                            }
+                        } label: {
+                            Image(systemName: "plus.circle.fill")
+                                .font(.system(size: 22))
+                                .foregroundColor(newTrackerURL.isEmpty ? AppColors.tertiaryLabel : AppColors.accent)
+                        }
+                        .disabled(newTrackerURL.isEmpty)
+                    }
+                } header: {
+                    Text("添加 Tracker")
+                }
+
+                Section {
+                    ForEach(trackers) { tracker in
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack {
+                                Circle()
+                                    .fill(trackerStatusColor(tracker.status))
+                                    .frame(width: 8, height: 8)
+                                Text(tracker.statusText)
+                                    .font(.system(size: 13, weight: .medium))
+                                    .foregroundColor(trackerStatusColor(tracker.status))
+                                Spacer()
+                                Text("种子 \(tracker.numSeeds)")
+                                    .font(.system(size: 11))
+                                    .foregroundColor(AppColors.tertiaryLabel)
+                            }
+                            Text(tracker.url)
+                                .font(.system(size: 12, design: .monospaced))
+                                .foregroundColor(AppColors.secondaryLabel)
+                                .lineLimit(2)
+                        }
+                        .padding(.vertical, 4)
+                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                            Button(role: .destructive) {
+                                Task {
+                                    try? await QBitApi.shared.removeTrackers(hash, urls: [tracker.url])
+                                    UINotificationFeedbackGenerator().notificationOccurred(.success)
+                                    if let t = try? await QBitApi.shared.getTorrentTrackers(hash) {
+                                        await MainActor.run { trackers = t }
+                                    }
+                                }
+                            } label: {
+                                Label("删除", systemImage: "trash")
+                            }
+                        }
+                    }
+                } header: {
+                    Text("当前 Trackers (\(trackers.count))")
+                }
+            }
+            .listStyle(.insetGrouped)
+            .scrollContentBackground(.hidden)
+            .background(AppColors.mainBg)
+            .navigationTitle("Tracker 管理")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("完成") { showTrackerSheet = false }
+                        .fontWeight(.medium)
+                        .foregroundColor(AppColors.accent)
+                }
+            }
         }
     }
 
