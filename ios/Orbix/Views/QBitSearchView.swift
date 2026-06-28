@@ -124,6 +124,12 @@ struct QBitSearchView: View {
                 loadPlugins()
                 loadCategories()
             }
+            .onDisappear {
+                searchTask?.cancel()
+                if let sid = searchId {
+                    Task { try? await QBitApi.shared.stopSearch(id: sid) }
+                }
+            }
             .sheet(isPresented: $showDownloadSheet) {
                 if let options = addOptions {
                     downloadSheet(options: options)
@@ -530,6 +536,7 @@ struct QBitSearchView: View {
                         )
                 } else {
                     Button {
+                        guard !showDownloadSheet, !showRadarrSheet else { return }
                         let impact = UIImpactFeedbackGenerator(style: .medium)
                         impact.impactOccurred()
                         if searchSource == .radarr {
@@ -616,9 +623,13 @@ struct QBitSearchView: View {
 
     // MARK: - 搜索逻辑
     private func debounceSearch() {
+        if let sid = searchId {
+            let oldId = sid
+            searchId = nil
+            Task { try? await QBitApi.shared.stopSearch(id: oldId) }
+        }
         searchTask?.cancel()
         guard !query.trimmingCharacters(in: .whitespaces).isEmpty else {
-            searchId = nil
             results = []
             searchError = nil
             isLoading = false
