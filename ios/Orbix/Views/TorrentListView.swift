@@ -11,6 +11,29 @@ struct TorrentListView: View {
     @State private var gDlLimitStr = ""
     @State private var gUlLimitStr = ""
     @State private var altSpeedEnabled = false
+    @State private var sortOrder: TorrentSort = .dateAdded
+
+    enum TorrentSort: String, CaseIterable {
+        case dateAdded = "添加时间"
+        case name = "名称"
+        case progress = "进度"
+        case size = "大小"
+        case ratio = "分享率"
+        case dlSpeed = "下载速度"
+        case upSpeed = "上传速度"
+
+        var icon: String {
+            switch self {
+            case .dateAdded: return "calendar"
+            case .name: return "textformat.abc"
+            case .progress: return "chart.bar"
+            case .size: return "internaldrive"
+            case .ratio: return "chart.line.uptrend.xyaxis"
+            case .dlSpeed: return "arrow.down"
+            case .upSpeed: return "arrow.up"
+            }
+        }
+    }
 
     enum TorrentFilter: String, CaseIterable {
         case all = "全部"
@@ -83,6 +106,25 @@ struct TorrentListView: View {
                             .foregroundColor(altSpeedEnabled ? AppColors.warning : AppColors.accent)
                     }
                 }
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Menu {
+                        ForEach(TorrentSort.allCases, id: \.self) { sort in
+                            Button {
+                                sortOrder = sort
+                            } label: {
+                                HStack {
+                                    Text(sort.rawValue)
+                                    if sortOrder == sort {
+                                        Image(systemName: "checkmark")
+                                    }
+                                }
+                            }
+                        }
+                    } label: {
+                        Image(systemName: "arrow.up.arrow.down")
+                            .foregroundColor(AppColors.accent)
+                    }
+                }
                 ToolbarItem(placement: .primaryAction) {
                     Button {
                         showAddTorrent = true
@@ -146,13 +188,22 @@ struct TorrentListView: View {
     }
 
     private var filteredTorrents: [TorrentInfo] {
-        switch filter {
-        case .all: return torrents
-        case .downloading: return torrents.filter { $0.statusBadge == .downloading || $0.statusBadge == .metaDL }
-        case .seeding: return torrents.filter { $0.statusBadge == .uploading || $0.statusBadge == .stalledUP }
-        case .active: return torrents.filter { $0.isActive }
-        case .paused: return torrents.filter { $0.statusBadge.isPaused }
-        case .completed: return torrents.filter { $0.isCompleted }
+        let base = switch filter {
+        case .all: torrents
+        case .downloading: torrents.filter { $0.statusBadge == .downloading || $0.statusBadge == .metaDL }
+        case .seeding: torrents.filter { $0.statusBadge == .uploading || $0.statusBadge == .stalledUP }
+        case .active: torrents.filter { $0.isActive }
+        case .paused: torrents.filter { $0.statusBadge.isPaused }
+        case .completed: torrents.filter { $0.isCompleted }
+        }
+        switch sortOrder {
+        case .dateAdded: return base.sorted { $0.addedOn > $1.addedOn }
+        case .name: return base.sorted { $0.name.localizedCompare($1.name) == .orderedAscending }
+        case .progress: return base.sorted { $0.progress > $1.progress }
+        case .size: return base.sorted { $0.size > $1.size }
+        case .ratio: return base.sorted { $0.ratio > $1.ratio }
+        case .dlSpeed: return base.sorted { $0.dlspeed > $1.dlspeed }
+        case .upSpeed: return base.sorted { $0.upspeed > $1.upspeed }
         }
     }
 
