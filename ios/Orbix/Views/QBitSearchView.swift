@@ -44,6 +44,7 @@ struct QBitSearchView: View {
     @State private var addOptions: AddTorrentOptions?
     @State private var showDownloadSheet = false
     @State private var searchSource: SearchSource = .qBittorrent
+    @State private var searchError: String?
 
     @State private var showRadarrSheet = false
     @State private var radarrResult: SearchResult?
@@ -85,6 +86,19 @@ struct QBitSearchView: View {
                             Text("正在全网检索...")
                                 .font(.system(size: 14, weight: .medium))
                                 .foregroundColor(AppColors.secondaryLabel)
+                            Spacer()
+                        }
+                    } else if let error = searchError {
+                        VStack(spacing: 12) {
+                            Spacer()
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.system(size: 40, weight: .light))
+                                .foregroundColor(AppColors.warning)
+                            Text(error)
+                                .font(.system(size: 15, weight: .regular))
+                                .foregroundColor(AppColors.secondaryLabel)
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal, 40)
                             Spacer()
                         }
                     } else if !query.isEmpty && results.isEmpty && !isLoading {
@@ -579,6 +593,7 @@ struct QBitSearchView: View {
         guard !query.trimmingCharacters(in: .whitespaces).isEmpty else {
             searchId = nil
             results = []
+            searchError = nil
             isLoading = false
             return
         }
@@ -590,7 +605,7 @@ struct QBitSearchView: View {
     }
 
     private func runSearch() async {
-        await MainActor.run { isLoading = true; results = [] }
+        await MainActor.run { isLoading = true; results = []; searchError = nil }
         switch searchSource {
         case .qBittorrent:
             await runQBitSearch()
@@ -632,7 +647,10 @@ struct QBitSearchView: View {
             }
             await MainActor.run { isLoading = false }
         } catch {
-            await MainActor.run { isLoading = false }
+            await MainActor.run {
+                isLoading = false
+                searchError = "内置搜索失败: \(error.localizedDescription)"
+            }
         }
     }
 
@@ -644,7 +662,10 @@ struct QBitSearchView: View {
                 self.isLoading = false
             }
         } catch {
-            await MainActor.run { isLoading = false }
+            await MainActor.run {
+                isLoading = false
+                searchError = "Prowlarr 连接失败: \(error.localizedDescription)"
+            }
         }
     }
 
@@ -656,7 +677,10 @@ struct QBitSearchView: View {
                 self.isLoading = false
             }
         } catch {
-            await MainActor.run { isLoading = false }
+            await MainActor.run {
+                isLoading = false
+                searchError = "Radarr 连接失败: \(error.localizedDescription)"
+            }
         }
     }
 }
