@@ -17,15 +17,15 @@ struct QBitSearchView: View {
 
                 VStack(spacing: 0) {
                     pluginBar
-                        .padding(.vertical, 8)
+                        .padding(.vertical, 12)
 
                     if isLoading && results.isEmpty {
                         VStack(spacing: 16) {
                             Spacer()
                             ProgressView()
                                 .tint(AppColors.accent)
-                            Text("正在搜索...")
-                                .font(.system(size: 14))
+                            Text("正在全网检索...")
+                                .font(.system(size: 14, weight: .medium))
                                 .foregroundColor(AppColors.secondaryLabel)
                             Spacer()
                         }
@@ -33,9 +33,10 @@ struct QBitSearchView: View {
                         VStack(spacing: 12) {
                             Spacer()
                             Image(systemName: "magnifyingglass")
-                                .font(.system(size: 40))
-                                .foregroundColor(AppColors.placeholder)
-                            Text("没有找到结果")
+                                .font(.system(size: 40, weight: .light))
+                                .foregroundColor(AppColors.tertiaryLabel)
+                            Text("未找到相关资源")
+                                .font(.system(size: 15, weight: .regular))
                                 .foregroundColor(AppColors.secondaryLabel)
                             Spacer()
                         }
@@ -44,18 +45,18 @@ struct QBitSearchView: View {
                     }
                 }
             }
-            .navigationTitle("搜索")
-            .searchable(text: $query, placement: .automatic, prompt: "搜索种子...")
+            .navigationTitle("探索")
+            .searchable(text: $query, placement: .automatic, prompt: "输入关键字或 Hash...")
             .onChange(of: query) { _, _ in debounceSearch() }
             .onAppear { loadPlugins() }
         }
     }
 
-    // MARK: - Plugin Bar
+    // MARK: - 极简插件栏
     private var pluginBar: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                pluginChip("all", label: "所有插件")
+            HStack(spacing: 10) {
+                pluginChip("all", label: "全部")
 
                 ForEach(plugins) { plugin in
                     if plugin.enabled {
@@ -80,36 +81,36 @@ struct QBitSearchView: View {
             }
         } label: {
             Text(label)
-                .font(.system(size: 13, weight: selected ? .semibold : .regular))
-                .foregroundColor(selected ? .white : AppColors.secondaryLabel)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
+                .font(.system(size: 14, weight: selected ? .semibold : .medium))
+                .foregroundColor(selected ? .white : AppColors.label)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
                 .background(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(selected ? AppColors.accent : AppColors.elevated)
+                    Capsule()
+                        .fill(selected ? AppColors.accent : Color.clear)
+                        .background(
+                            Capsule().fill(.regularMaterial)
+                        )
+                        .shadow(color: selected ? AppColors.accent.opacity(0.3) : .clear, radius: 4, y: 2)
                 )
         }
     }
 
-    // MARK: - Results List
+    // MARK: - 结果列表
     private var resultsList: some View {
         ScrollView {
-            LazyVStack(spacing: 10) {
+            LazyVStack(spacing: 12) {
                 if !results.isEmpty {
                     HStack {
-                        Text("\(results.count) 条结果")
-                            .font(.system(size: 13))
+                        Text("\(results.count) 个结果")
+                            .font(.system(size: 12, weight: .semibold))
                             .foregroundColor(AppColors.secondaryLabel)
+                            .textCase(.uppercase)
                         Spacer()
                         if status == "Running" {
-                            HStack(spacing: 4) {
-                                ProgressView()
-                                    .scaleEffect(0.6)
-                                    .tint(AppColors.accent)
-                                Text("搜索中...")
-                                    .font(.system(size: 12))
-                                    .foregroundColor(AppColors.tertiaryLabel)
-                            }
+                            ProgressView()
+                                .controlSize(.mini)
+                                .tint(AppColors.accent)
                         }
                     }
                     .padding(.horizontal, 16)
@@ -125,24 +126,25 @@ struct QBitSearchView: View {
         }
     }
 
+    // MARK: - 结果卡片
     private func resultCard(_ item: SearchResult) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
             Text(item.fileName)
-                .font(.system(size: 15, weight: .medium))
+                .font(.system(size: 16, weight: .medium, design: .rounded))
                 .foregroundColor(AppColors.label)
                 .lineLimit(2)
 
-            HStack(spacing: 12) {
-                Label(formatBytes(Int64(item.fileSize)), systemImage: "doc")
-                    .font(.system(size: 12))
+            HStack(spacing: 16) {
+                Label(formatBytes(Int64(item.fileSize)), systemImage: "internaldrive")
+                    .font(.system(size: 12, weight: .medium))
                     .foregroundColor(AppColors.secondaryLabel)
 
-                Label("\(item.nbSeeders)", systemImage: "arrow.up.circle")
-                    .font(.system(size: 12))
+                Label("\(item.nbSeeders)", systemImage: "arrow.up.circle.fill")
+                    .font(.system(size: 12, weight: .bold))
                     .foregroundColor(AppColors.success)
 
-                Label("\(item.nbLeechers)", systemImage: "arrow.down.circle")
-                    .font(.system(size: 12))
+                Label("\(item.nbLeechers)", systemImage: "arrow.down.circle.fill")
+                    .font(.system(size: 12, weight: .bold))
                     .foregroundColor(AppColors.danger)
 
                 Spacer()
@@ -150,36 +152,39 @@ struct QBitSearchView: View {
                 Button {
                     Task {
                         try? await QBitApi.shared.addMagnet([item.descr])
-                        let generator = UINotificationFeedbackGenerator()
-                        generator.notificationOccurred(.success)
+                        UINotificationFeedbackGenerator().notificationOccurred(.success)
                     }
                 } label: {
-                    Image(systemName: "arrow.down.to.line")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundColor(.white)
-                        .padding(6)
+                    Image(systemName: "icloud.and.arrow.down")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(AppColors.accent)
+                        .padding(8)
                         .background(
-                            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                .fill(AppColors.accent)
+                            Circle().fill(AppColors.accent.opacity(0.1))
                         )
                 }
             }
 
             if !item.siteUrl.isEmpty {
                 Text(item.siteUrl)
-                    .font(.system(size: 11))
+                    .font(.system(size: 11, weight: .regular))
                     .foregroundColor(AppColors.tertiaryLabel)
                     .lineLimit(1)
             }
         }
-        .padding(14)
+        .padding(16)
         .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(AppColors.card)
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(.ultraThinMaterial)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(Color.white.opacity(0.05), lineWidth: 0.5)
+                )
+                .shadow(color: .black.opacity(0.03), radius: 8, x: 0, y: 4)
         )
     }
 
-    // MARK: - Search Logic
+    // MARK: - 搜索逻辑
     private func loadPlugins() {
         Task {
             if let list = try? await QBitApi.shared.getSearchPlugins() {
@@ -215,24 +220,26 @@ struct QBitSearchView: View {
             }
             await MainActor.run { searchId = id }
 
-            // Poll until done
             var attempts = 0
             while attempts < 30 {
                 try await Task.sleep(nanoseconds: 1_000_000_000)
                 guard !Task.isCancelled else { return }
                 attempts += 1
+
+                // 轮询期间实时拉取结果，瀑布流式更新
+                if let items = try? await QBitApi.shared.getSearchResults(id: id) {
+                    await MainActor.run {
+                        self.results = items.sorted { $0.nbSeeders > $1.nbSeeders }
+                    }
+                }
+
                 if let s = try? await QBitApi.shared.getSearchStatus(id: id) {
                     let st = s["status"] as? String ?? ""
                     await MainActor.run { status = st }
                     if st == "Stopped" { break }
                 }
             }
-
-            let items = try await QBitApi.shared.getSearchResults(id: id)
-            await MainActor.run {
-                results = items.sorted { $0.nbSeeders > $1.nbSeeders }
-                isLoading = false
-            }
+            await MainActor.run { isLoading = false }
         } catch {
             await MainActor.run { isLoading = false }
         }
