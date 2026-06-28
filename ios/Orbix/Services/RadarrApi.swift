@@ -49,13 +49,18 @@ enum RadarrApi {
 
     @MainActor
     static func lookup(query: String) async throws -> [SearchResult] {
-        guard let cred = CredentialsManager.shared.radarr, !cred.apiKey.isEmpty else { return [] }
-        let urlStr = "\(cred.apiURL)/movie/lookup?term=\(query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query)"
-        guard let url = URL(string: urlStr) else { return [] }
+        guard let cred = CredentialsManager.shared.radarr, !cred.apiKey.isEmpty else {
+            throw ApiError.unauthorized
+        }
+        let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query
+        guard let url = URL(string: "\(cred.apiURL)/movie/lookup?term=\(encoded)") else { return [] }
 
         var req = URLRequest(url: url)
         req.setValue(cred.apiKey, forHTTPHeaderField: "X-Api-Key")
-        let (data, _) = try await session.data(for: req)
+        let (data, response) = try await session.data(for: req)
+        if let http = response as? HTTPURLResponse, http.statusCode != 200 {
+            throw NSError(domain: "Radarr", code: http.statusCode)
+        }
         let movies = (try? decoder.decode([RadarrMovie].self, from: data)) ?? []
         return movies.map { movie in
             SearchResult(
