@@ -483,54 +483,81 @@ struct QBitSearchView: View {
     // MARK: - 结果卡片
     private func resultCard(_ item: SearchResult) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(item.fileName)
-                .font(.system(size: 16, weight: .medium, design: .rounded))
-                .foregroundColor(AppColors.label)
-                .lineLimit(2)
+            HStack(alignment: .top, spacing: 6) {
+                Text(item.fileName)
+                    .font(.system(size: 16, weight: .medium, design: .rounded))
+                    .foregroundColor(item.isAdded ? AppColors.secondaryLabel : AppColors.label)
+                    .lineLimit(2)
+                if item.isAdded {
+                    Text("已在库中")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundColor(AppColors.success)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(
+                            RoundedRectangle(cornerRadius: 4)
+                                .fill(AppColors.success.opacity(0.12))
+                        )
+                }
+            }
 
             HStack(spacing: 16) {
                 Label(formatBytes(Int64(item.fileSize)), systemImage: "internaldrive")
                     .font(.system(size: 12, weight: .medium))
                     .foregroundColor(AppColors.secondaryLabel)
 
-                Label("\(item.nbSeeders)", systemImage: "arrow.up.circle.fill")
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundColor(AppColors.success)
+                if item.nbSeeders > 0 {
+                    Label("\(item.nbSeeders)", systemImage: "arrow.up.circle.fill")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(AppColors.success)
+                }
 
-                Label("\(item.nbLeechers)", systemImage: "arrow.down.circle.fill")
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundColor(AppColors.danger)
+                if item.nbLeechers > 0 {
+                    Label("\(item.nbLeechers)", systemImage: "arrow.down.circle.fill")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(AppColors.danger)
+                }
 
                 Spacer()
 
-                Button {
-                    let impact = UIImpactFeedbackGenerator(style: .medium)
-                    impact.impactOccurred()
-                    if searchSource == .radarr {
-                        radarrResult = item
-                        Task {
-                            let p = (try? await RadarrApi.getQualityProfiles()) ?? []
-                            let r = (try? await RadarrApi.getRootFolders()) ?? []
-                            await MainActor.run {
-                                qualityProfiles = p
-                                rootFolders = r
-                                selectedQualityId = p.first?.id ?? 0
-                                selectedRootPath = r.first?.path ?? ""
-                                showRadarrSheet = true
-                            }
-                        }
-                    } else {
-                        addOptions = AddTorrentOptions(result: item)
-                        showDownloadSheet = true
-                    }
-                } label: {
-                    Image(systemName: "icloud.and.arrow.down")
+                if item.isAdded {
+                    Image(systemName: "checkmark.circle.fill")
                         .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(AppColors.accent)
+                        .foregroundColor(AppColors.success.opacity(0.5))
                         .padding(8)
                         .background(
-                            Circle().fill(AppColors.accent.opacity(0.1))
+                            Circle().fill(AppColors.success.opacity(0.1))
                         )
+                } else {
+                    Button {
+                        let impact = UIImpactFeedbackGenerator(style: .medium)
+                        impact.impactOccurred()
+                        if searchSource == .radarr {
+                            radarrResult = item
+                            Task {
+                                let p = (try? await RadarrApi.getQualityProfiles()) ?? []
+                                let r = (try? await RadarrApi.getRootFolders()) ?? []
+                                await MainActor.run {
+                                    qualityProfiles = p
+                                    rootFolders = r
+                                    selectedQualityId = p.first?.id ?? 0
+                                    selectedRootPath = r.first?.path ?? ""
+                                    showRadarrSheet = true
+                                }
+                            }
+                        } else {
+                            addOptions = AddTorrentOptions(result: item)
+                            showDownloadSheet = true
+                        }
+                    } label: {
+                        Image(systemName: "icloud.and.arrow.down")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(AppColors.accent)
+                            .padding(8)
+                            .background(
+                                Circle().fill(AppColors.accent.opacity(0.1))
+                            )
+                    }
                 }
             }
 

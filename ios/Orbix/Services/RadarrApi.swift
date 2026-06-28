@@ -65,7 +65,8 @@ enum RadarrApi {
                 fileSize: 0,
                 nbLeechers: 0,
                 nbSeeders: 0,
-                siteUrl: movie.images?.first(where: { $0.coverType == "poster" })?.remoteUrl ?? ""
+                siteUrl: movie.images?.first(where: { $0.coverType == "poster" })?.remoteUrl ?? "",
+                isAdded: movie.id > 0 || movie.hasFile == true
             )
         }
     }

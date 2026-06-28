@@ -374,6 +374,7 @@ struct SearchResult: Codable, Identifiable {
     let nbLeechers: Int
     let nbSeeders: Int
     let siteUrl: String
+    var isAdded: Bool = false
 
     enum CodingKeys: String, CodingKey {
         case num, descr
