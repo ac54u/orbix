@@ -2,7 +2,6 @@ import Foundation
 
 // MARK: - Radarr API
 enum RadarrApi {
-    static let shared = RadarrApi()
 
     private static let session = URLSession(configuration: .ephemeral)
     private static let decoder = JSONDecoder()
@@ -52,6 +51,7 @@ enum RadarrApi {
 
     // MARK: - Lookup
 
+    @MainActor
     static func lookup(query: String) async throws -> [SearchResult] {
         guard let cred = credential, !cred.apiKey.isEmpty else { return [] }
         let urlStr = "\(cred.apiURL)/movie/lookup?term=\(query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query)"
@@ -74,6 +74,7 @@ enum RadarrApi {
         }
     }
 
+    @MainActor
     static func getMovies() async throws -> [RadarrMovie] {
         guard let cred = credential, !cred.apiKey.isEmpty else { return [] }
         guard let url = URL(string: "\(cred.apiURL)/movie") else { return [] }
@@ -84,6 +85,7 @@ enum RadarrApi {
     }
 
     // MARK: - Profiles & Root Folders
+    @MainActor
     static func getQualityProfiles() async throws -> [QualityProfile] {
         guard let cred = credential, !cred.apiKey.isEmpty else { return [] }
         guard let url = URL(string: "\(cred.apiURL)/qualityprofile") else { return [] }
@@ -93,6 +95,7 @@ enum RadarrApi {
         return (try? decoder.decode([QualityProfile].self, from: data)) ?? []
     }
 
+    @MainActor
     static func getRootFolders() async throws -> [RootFolder] {
         guard let cred = credential, !cred.apiKey.isEmpty else { return [] }
         guard let url = URL(string: "\(cred.apiURL)/rootfolder") else { return [] }
@@ -103,6 +106,7 @@ enum RadarrApi {
     }
 
     // MARK: - Add Movie
+    @MainActor
     static func addMovie(
         tmdbId: Int,
         title: String,

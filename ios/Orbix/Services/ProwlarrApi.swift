@@ -2,7 +2,6 @@ import Foundation
 
 // MARK: - Prowlarr API
 enum ProwlarrApi {
-    static let shared = ProwlarrApi()
 
     private static let session = URLSession(configuration: .ephemeral)
     private static let decoder = JSONDecoder()
@@ -28,6 +27,7 @@ enum ProwlarrApi {
         }
     }
 
+    @MainActor
     static func search(query: String, indexerIds: [Int] = []) async throws -> [SearchResult] {
         guard let cred = credential, !cred.apiKey.isEmpty else { return [] }
         var urlStr = "\(cred.apiURL)/search?query=\(query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query)&type=search"
@@ -43,6 +43,7 @@ enum ProwlarrApi {
         return results.map(\.toUnified)
     }
 
+    @MainActor
     static func getIndexers() async throws -> [(id: Int, name: String)] {
         guard let cred = credential, !cred.apiKey.isEmpty else { return [] }
         guard let url = URL(string: "\(cred.apiURL)/indexer") else { return [] }
