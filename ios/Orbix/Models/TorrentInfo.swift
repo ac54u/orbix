@@ -365,7 +365,8 @@ struct SearchPlugin: Codable, Identifiable {
     }
 }
 
-struct SearchResult: Codable {
+struct SearchResult: Codable, Identifiable {
+    var id: Int { num }
     let num: Int
     let descr: String
     let fileName: String

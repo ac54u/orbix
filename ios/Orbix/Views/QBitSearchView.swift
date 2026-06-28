@@ -151,7 +151,7 @@ struct QBitSearchView: View {
 
                 Button {
                     Task {
-                        try? await QBitApi.shared.addMagnet([item.descr])
+                        _ = try? await QBitApi.shared.addMagnet([item.descr])
                         UINotificationFeedbackGenerator().notificationOccurred(.success)
                     }
                 } label: {
