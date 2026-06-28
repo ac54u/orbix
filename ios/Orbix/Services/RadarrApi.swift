@@ -6,10 +6,6 @@ enum RadarrApi {
     private static let session = URLSession(configuration: .ephemeral)
     private static let decoder = JSONDecoder()
 
-    private static var credential: ServiceCredential? {
-        CredentialsManager.shared.radarr
-    }
-
     struct RadarrMovie: Codable, Identifiable {
         let id: Int
         let title: String
@@ -53,7 +49,7 @@ enum RadarrApi {
 
     @MainActor
     static func lookup(query: String) async throws -> [SearchResult] {
-        guard let cred = credential, !cred.apiKey.isEmpty else { return [] }
+        guard let cred = CredentialsManager.shared.radarr, !cred.apiKey.isEmpty else { return [] }
         let urlStr = "\(cred.apiURL)/movie/lookup?term=\(query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query)"
         guard let url = URL(string: urlStr) else { return [] }
 
@@ -76,7 +72,7 @@ enum RadarrApi {
 
     @MainActor
     static func getMovies() async throws -> [RadarrMovie] {
-        guard let cred = credential, !cred.apiKey.isEmpty else { return [] }
+        guard let cred = CredentialsManager.shared.radarr, !cred.apiKey.isEmpty else { return [] }
         guard let url = URL(string: "\(cred.apiURL)/movie") else { return [] }
         var req = URLRequest(url: url)
         req.setValue(cred.apiKey, forHTTPHeaderField: "X-Api-Key")
@@ -87,7 +83,7 @@ enum RadarrApi {
     // MARK: - Profiles & Root Folders
     @MainActor
     static func getQualityProfiles() async throws -> [QualityProfile] {
-        guard let cred = credential, !cred.apiKey.isEmpty else { return [] }
+        guard let cred = CredentialsManager.shared.radarr, !cred.apiKey.isEmpty else { return [] }
         guard let url = URL(string: "\(cred.apiURL)/qualityprofile") else { return [] }
         var req = URLRequest(url: url)
         req.setValue(cred.apiKey, forHTTPHeaderField: "X-Api-Key")
@@ -97,7 +93,7 @@ enum RadarrApi {
 
     @MainActor
     static func getRootFolders() async throws -> [RootFolder] {
-        guard let cred = credential, !cred.apiKey.isEmpty else { return [] }
+        guard let cred = CredentialsManager.shared.radarr, !cred.apiKey.isEmpty else { return [] }
         guard let url = URL(string: "\(cred.apiURL)/rootfolder") else { return [] }
         var req = URLRequest(url: url)
         req.setValue(cred.apiKey, forHTTPHeaderField: "X-Api-Key")
@@ -116,7 +112,7 @@ enum RadarrApi {
         monitored: Bool = true,
         searchOnAdd: Bool = true
     ) async throws {
-        guard let cred = credential, !cred.apiKey.isEmpty else { return }
+        guard let cred = CredentialsManager.shared.radarr, !cred.apiKey.isEmpty else { return }
         guard let url = URL(string: "\(cred.apiURL)/movie") else { return }
 
         let body: [String: Any] = [
