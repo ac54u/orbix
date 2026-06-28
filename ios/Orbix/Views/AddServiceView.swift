@@ -174,7 +174,7 @@ struct AddServiceView: View {
                     if isTesting {
                         ProgressView().tint(AppColors.accent)
                     } else {
-                        Button("保存") { Task { await testAndSave() } }
+                        Button("连接") { Task { await testAndSave() } }
                             .fontWeight(.bold)
                             .foregroundColor(host.isEmpty ? AppColors.secondaryLabel : AppColors.accent)
                             .disabled(host.isEmpty)
