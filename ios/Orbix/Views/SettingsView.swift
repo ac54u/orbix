@@ -64,7 +64,7 @@ struct SettingsView: View {
                 AddServiceView(existing: editingCred) { cred in
                     creds.save(cred)
                 }
-                .presentationDetents([.medium, .large])
+                .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
             }
             .onAppear { loadInfo() }

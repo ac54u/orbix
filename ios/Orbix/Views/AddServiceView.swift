@@ -160,6 +160,7 @@ struct AddServiceView: View {
             }
             .listStyle(.insetGrouped)
             .scrollContentBackground(.hidden)
+            .scrollDismissesKeyboard(.immediately)
             .background(AppColors.mainBg)
             .navigationTitle(existing != nil ? "编辑服务" : "添加服务")
             .navigationBarTitleDisplayMode(.inline)
@@ -225,5 +226,5 @@ struct AddServiceView: View {
             )
         }
         onSave(cred)
-    }
-}
+                }
+            }
