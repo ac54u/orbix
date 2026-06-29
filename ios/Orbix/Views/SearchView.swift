@@ -227,7 +227,6 @@ struct SearchView: View {
                         .padding(.bottom, viewMode == .list ? AppSpacing.sm : 0)
                     }
                 }
-                }
 
                 if !results.isEmpty, !showingBookmarks {
                     VStack(spacing: 4) {
