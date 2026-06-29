@@ -116,7 +116,6 @@ struct AppLockGate<Content: View>: View {
 
 private struct LockScreen: View {
     @EnvironmentObject private var appLock: AppLockService
-    @State private var logoPulse = false
 
     private var biometricIcon: String {
         appLock.hasFaceID ? "faceid" : "touchid"
@@ -126,26 +125,19 @@ private struct LockScreen: View {
         ZStack {
             AppColors.mainBg.ignoresSafeArea()
 
-            VStack(spacing: 48) {
-                GlowingLogo(size: 96)
-                    .scaleEffect(logoPulse ? 1.04 : 1.0)
-                    .animation(.easeInOut(duration: 2.0).repeatForever(autoreverses: true), value: logoPulse)
-                    .onAppear { logoPulse = true }
-
+            VStack(spacing: AppSpacing.lg) {
                 Button {
                     appLock.authenticate()
                 } label: {
                     Image(systemName: biometricIcon)
-                        .font(.system(size: 32, weight: .regular))
-                        .foregroundColor(AppColors.label)
-                        .frame(width: 72, height: 72)
-                        .background(
-                            Circle()
-                                .fill(AppColors.accent)
-                                .shadow(color: AppColors.accent.opacity(0.4), radius: 16, x: 0, y: 4)
-                        )
+                        .font(.system(size: 40, weight: .regular))
+                        .foregroundColor(AppColors.accent)
                 }
                 .buttonStyle(ScaleButtonStyle())
+
+                Text(String(localized: "轻点以验证身份", comment: "Tap to verify identity"))
+                    .font(.system(size: 15))
+                    .foregroundColor(AppColors.tertiaryLabel)
             }
         }
     }
