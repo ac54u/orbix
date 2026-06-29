@@ -99,6 +99,11 @@ struct TorrentListView: View {
                     }
                 } else {
                     List {
+                        filterBar
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
+                            .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
+
                         ForEach(filteredTorrents) { torrent in
                             HStack(spacing: 0) {
                                 if isEditMode {
@@ -110,7 +115,7 @@ struct TorrentListView: View {
                             }
                             .listRowBackground(Color.clear)
                             .listRowSeparator(.hidden)
-                            .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
+                            .listRowInsets(EdgeInsets(top: 4, leading: 12, bottom: 4, trailing: 12))
                             .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                                 Button(role: .destructive) {
                                     executeSingleAction(.deleteFiles, torrent)
@@ -258,9 +263,6 @@ struct TorrentListView: View {
                 Button(OrbixStrings.btnCancel, role: .cancel) {}
             } message: {
                 Text(String(format: OrbixStrings.infoBatchDeleteConfirm, selectedHashes.count))
-            }
-            .safeAreaInset(edge: .top, spacing: 0) {
-                filterBar
             }
         }
     }

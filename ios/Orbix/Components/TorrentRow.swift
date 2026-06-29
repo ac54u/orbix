@@ -10,7 +10,7 @@ struct TorrentRow: View {
             HStack(alignment: .top, spacing: AppSpacing.md) {
                 StatusIcon(status: torrent.statusBadge)
 
-                VStack(alignment: .leading, spacing: AppSpacing.sm) {
+                VStack(alignment: .leading, spacing: AppSpacing.xs) {
                     nameRow
 
                     metadataRow
@@ -22,7 +22,8 @@ struct TorrentRow: View {
                     }
                 }
             }
-            .padding(AppSpacing.lg)
+            .padding(.horizontal, AppSpacing.lg)
+            .padding(.vertical, AppSpacing.md)
         }
         .background(
             RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
@@ -34,7 +35,7 @@ struct TorrentRow: View {
         RoundedRectangle(cornerRadius: AppRadius.xs, style: .continuous)
             .fill(torrent.progressColor)
             .frame(width: 3)
-            .padding(.vertical, AppSpacing.md)
+            .padding(.vertical, AppSpacing.sm)
     }
 
     private var nameRow: some View {
@@ -112,7 +113,7 @@ struct TorrentRow: View {
                         .animation(.linear(duration: 0.3), value: torrent.progress)
                 }
             }
-            .frame(height: 3)
+            .frame(height: 2.5)
 
             Text("\(torrent.progressPercent)%")
                 .font(.system(size: 12, weight: .medium, design: .monospaced))
