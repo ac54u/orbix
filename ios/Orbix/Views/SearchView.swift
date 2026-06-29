@@ -306,6 +306,7 @@ struct SearchView: View {
             print("[SearchView] refreshSearch error: \(error)")
 #endif
         }
+    }
 
     private func loadMore() {
         guard !isLoadingMore, hasMorePages else { return }
