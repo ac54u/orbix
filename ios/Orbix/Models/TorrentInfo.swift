@@ -172,6 +172,25 @@ enum TorrentStatus: String {
         self == .error || self == .missingFiles
     }
 
+    var isDownloadRelated: Bool {
+        switch self {
+        case .downloading, .metaDL, .forcedDL, .stalledDL,
+                .pausedDL, .stoppedDL, .queuedDL, .checkingDL,
+                .checkingResumeData, .allocating:
+            true
+        default: false
+        }
+    }
+
+    var isUploadRelated: Bool {
+        switch self {
+        case .uploading, .forcedUP, .stalledUP,
+                .pausedUP, .stoppedUP, .queuedUP, .checkingUP:
+            true
+        default: false
+        }
+    }
+
     var statusColor: Color {
         switch self {
         case .uploading, .stalledUP, .forcedUP: return AppColors.success

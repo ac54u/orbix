@@ -525,14 +525,8 @@ struct TorrentListView: View {
     private var filteredTorrents: [TorrentInfo] {
         let base = switch filter {
         case .all: torrents
-        case .downloading: torrents.filter { s in
-            let t = s.statusBadge
-            return t == .downloading || t == .metaDL || t == .pausedDL || t == .stoppedDL || t == .queuedDL || t == .stalledDL || t == .forcedDL || t == .checkingDL
-        }
-        case .seeding: torrents.filter { s in
-            let t = s.statusBadge
-            return t == .uploading || t == .stalledUP || t == .pausedUP || t == .stoppedUP || t == .queuedUP || t == .forcedUP || t == .checkingUP
-        }
+        case .downloading: torrents.filter { $0.statusBadge.isDownloadRelated }
+        case .seeding: torrents.filter { $0.statusBadge.isUploadRelated }
         case .active: torrents.filter { $0.isActive }
         case .paused: torrents.filter { $0.statusBadge.isPaused }
         case .completed: torrents.filter { $0.isCompleted }
