@@ -56,12 +56,6 @@ struct SwipeableTorrentCard: View {
                     }
                 } label: {
                     TorrentRow(torrent: torrent)
-                        .padding(.vertical, 14)
-                        .padding(.horizontal, 16)
-                        .background(
-                            RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
-                                .fill(AppColors.card)
-                        )
                 }
                 .buttonStyle(SolidCardButtonStyle())
                 .accessibilityLabel("\(torrent.name), \(torrent.statusBadge.displayName), \(torrent.progressPercent)%")

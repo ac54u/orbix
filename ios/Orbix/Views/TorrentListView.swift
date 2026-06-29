@@ -97,9 +97,9 @@ struct TorrentListView: View {
                     List {
                         ForEach(filteredTorrents) { torrent in
                             TorrentRow(torrent: torrent)
-                                .listRowBackground(AppColors.card)
+                                .listRowBackground(Color.clear)
                                 .listRowSeparator(.hidden)
-                                .listRowInsets(EdgeInsets(top: 6, leading: 20, bottom: 6, trailing: 20))
+                                .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
                                 .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                                     Button(role: .destructive) {
                                         executeDelete(torrent)
