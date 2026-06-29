@@ -94,10 +94,9 @@ struct TorrentDetailFileSheet: View {
         Task {
             try? await QBitApi.shared.setFilePriorities(hash, indices: indices, priority: priority)
             UINotificationFeedbackGenerator().notificationOccurred(.success)
-            if let f = try? await QBitApi.shared.getTorrentFiles(hash) {
-                await MainActor.run {
-                    selectedFileIndices = []
-                }
+            _ = try? await QBitApi.shared.getTorrentFiles(hash)
+            await MainActor.run {
+                selectedFileIndices = []
             }
         }
     }

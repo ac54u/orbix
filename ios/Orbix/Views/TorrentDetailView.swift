@@ -524,6 +524,15 @@ struct TorrentDetailView: View {
         }
     }
 
+    private func trackerStatusColor(_ status: Int) -> Color {
+        switch status {
+        case 0, 1: return AppColors.danger
+        case 2, 4: return AppColors.success
+        case 3: return AppColors.warning
+        default: return AppColors.secondaryLabel
+        }
+    }
+
     private func countryColor(_ code: String) -> Color {
         switch code.uppercased() {
         case "CN", "HK", "TW", "MO": return AppColors.danger
