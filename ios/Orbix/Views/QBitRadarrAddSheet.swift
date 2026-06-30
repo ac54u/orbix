@@ -172,8 +172,8 @@ struct QBitRadarrAddSheet: View {
             RadarrApi.QualityProfile(id: 2, name: "4K")
         ],
         rootFolders: [
-            RadarrApi.RootFolder(id: 1, path: "/movies"),
-            RadarrApi.RootFolder(id: 2, path: "/data/media")
+            RadarrApi.RootFolder(id: 1, path: "/movies", freeSpace: nil),
+            RadarrApi.RootFolder(id: 2, path: "/data/media", freeSpace: nil)
         ]
     )
 }
