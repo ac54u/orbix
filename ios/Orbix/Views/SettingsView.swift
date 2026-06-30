@@ -65,18 +65,24 @@ struct SettingsView: View {
                 logout()
             }
         } header: {
-            sectionHeader(icon: "server.rack", title: serverName) {
+            HStack(spacing: 6) {
+                Image(systemName: "server.rack")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(AppColors.accent)
+                Text(serverName)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundColor(AppColors.label)
+                Spacer()
                 if let online = serverOnline {
                     HStack(spacing: 4) {
-                        Circle()
-                            .fill(online ? AppColors.success : AppColors.danger)
-                            .frame(width: 6, height: 6)
+                        Circle().fill(online ? AppColors.success : AppColors.danger).frame(width: 6, height: 6)
                         Text(online ? String(localized: "在线", comment: "Online") : String(localized: "离线", comment: "Offline"))
                     }
                     .font(.system(size: 12))
                     .foregroundColor(AppColors.secondaryLabel)
                 }
             }
+            .textCase(nil)
         }
     }
 
@@ -100,7 +106,7 @@ struct SettingsView: View {
                     }
                 }
             } header: {
-                sectionHeader(icon: appLock.hasFaceID ? "faceid" : "touchid",
+                labeledHeader(icon: appLock.hasFaceID ? "faceid" : "touchid",
                               title: appLock.hasFaceID ? "Face ID" : OrbixStrings.miscBiometric)
             }
         }
@@ -129,7 +135,7 @@ struct SettingsView: View {
                     showAddService = true
                 }
             } header: {
-                sectionHeader(icon: "antenna.radiowaves.left.and.right",
+                labeledHeader(icon: "antenna.radiowaves.left.and.right",
                               title: OrbixStrings.sectionServices)
             }
         }
@@ -180,7 +186,7 @@ struct SettingsView: View {
                 downloadProgressBar
             }
         } header: {
-            sectionHeader(icon: "arrow.down.circle", title: "v\(appVersion)")
+            labeledHeader(icon: "arrow.down.circle", title: "v\(appVersion)")
         }
     }
 
@@ -190,7 +196,7 @@ struct SettingsView: View {
             row(icon: "tag", label: String(localized: "版本", comment: "Version"), value: appVersion)
             row(icon: "number", label: String(localized: "构建号", comment: "Build"), value: buildNumber)
         } header: {
-            sectionHeader(icon: "info.circle", title: String(localized: "关于", comment: "About"))
+            labeledHeader(icon: "info.circle", title: String(localized: "关于", comment: "About"))
         }
     }
 
@@ -254,7 +260,7 @@ struct SettingsView: View {
     }
 
     // MARK: - Row Helpers
-    private func sectionHeader(icon: String, title: String, trailing: (() -> some View)? = nil) -> some View {
+    private func labeledHeader(icon: String, title: String) -> some View {
         HStack(spacing: 6) {
             Image(systemName: icon)
                 .font(.system(size: 12, weight: .semibold))
@@ -262,10 +268,6 @@ struct SettingsView: View {
             Text(title)
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundColor(AppColors.label)
-            Spacer()
-            if let t = trailing {
-                AnyView(t())
-            }
         }
         .textCase(nil)
     }
