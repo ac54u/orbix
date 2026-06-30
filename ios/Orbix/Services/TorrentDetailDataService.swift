@@ -21,7 +21,11 @@ actor TorrentDetailDataService {
         async let trTask = QBitApi.shared.getTorrentTrackers(hash)
         async let peTask = QBitApi.shared.getTorrentPeers(hash, rid: 0)
 
-        let torrent = try await tTask
+        let rawTorrent = try await tTask
+        guard let torrent = rawTorrent else {
+            throw NSError(domain: "TorrentDetail", code: 404,
+                          userInfo: [NSLocalizedDescriptionKey: OrbixStrings.errCantLoadTorrent])
+        }
         let p = try? await pTask
         let f = (try? await fTask) ?? []
         let tr = (try? await trTask) ?? []

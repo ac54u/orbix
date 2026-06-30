@@ -192,16 +192,21 @@ actor QBitApi {
 
     // MARK: - Authenticated Request
     func authedGet<T: Decodable>(_ path: String, type: T.Type) async throws -> T? {
-        try await withRetry {
-            guard let url = apiUrl(path) else { throw ApiError.invalidURL }
-
-            var req = URLRequest(url: url)
-            req.timeoutInterval = NetworkTimeout.brief
-
-            let (data, response) = try await session.data(for: req)
-            try checkAuth(response: response)
-            return try? decoder.decode(T.self, from: data)
+        var lastError: Error = ApiError.invalidURL
+        for attempt in 0..<2 {
+            do {
+                guard let url = apiUrl(path) else { throw ApiError.invalidURL }
+                var req = URLRequest(url: url)
+                req.timeoutInterval = NetworkTimeout.brief
+                let (data, response) = try await session.data(for: req)
+                try checkAuth(response: response)
+                return try? decoder.decode(T.self, from: data)
+            } catch {
+                lastError = error
+                if attempt == 0 { try? await Task.sleep(nanoseconds: 500_000_000) }
+            }
         }
+        throw lastError
     }
 
     func authedGetData(_ path: String) async throws -> Data {

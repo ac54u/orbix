@@ -7,11 +7,15 @@ actor TorrentSearchService {
     private let session = URLSession.shared
 
     func trending(pages: Int = 2) async throws -> [ScrapedTorrent] {
-        try await fetchPages(pages: pages, startPage: 1, pageFetcher: fetchNewPage)
+        try await fetchPages(pages: pages, startPage: 1) { @Sendable page in
+            try await fetchNewPage(page)
+        }
     }
 
     func newTorrents(pages: Int = 1, startPage: Int = 1) async throws -> [ScrapedTorrent] {
-        try await fetchPages(pages: pages, startPage: startPage, pageFetcher: fetchNewPage)
+        try await fetchPages(pages: pages, startPage: startPage) { @Sendable page in
+            try await fetchNewPage(page)
+        }
     }
 
     func search(query: String, pages: Int = 3, startPage: Int = 1) async throws -> [ScrapedTorrent] {
