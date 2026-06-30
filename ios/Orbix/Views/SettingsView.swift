@@ -4,16 +4,22 @@ struct SettingsView: View {
     let onLogout: () -> Void
 
     @State private var appVersion: String = ""
+    @State private var buildNumber: String = ""
     @State private var serverName: String = ""
     @State private var serverURL: String = ""
     @State private var serverVersion: String = ""
     @State private var username: String = ""
     @State private var isLoading = true
 
+    @State private var serverOnline: Bool?
+    @State private var prowlarrOnline: Bool?
+    @State private var radarrOnline: Bool?
+
     @State private var updateCheck: UpdateCheck?
     @State private var isCheckingUpdate = false
     @State private var isDownloading = false
     @State private var downloadProgress: Double = 0
+    @State private var showCacheCleared = false
 
     @EnvironmentObject private var appLock: AppLockService
     @ObservedObject private var creds = CredentialsManager.shared
@@ -27,19 +33,20 @@ struct SettingsView: View {
 
                 if isLoading {
                     VStack(spacing: AppSpacing.md) {
-                        SkeletonBar(height: 120)
+                        SkeletonBar(height: 140)
                         SkeletonBar(height: 56)
-                        SkeletonBar(height: 100)
+                        SkeletonBar(height: 160)
                     }
                     .padding(.horizontal, AppSpacing.xl)
                     .padding(.top, AppSpacing.xl)
                 } else {
                     ScrollView {
-                        VStack(spacing: AppSpacing.xl) {
+                        VStack(spacing: AppSpacing.lg) {
                             serverCard
                             securityCard
                             servicesCard
                             updateCard
+                            aboutCard
                             Color.clear.frame(height: 80)
                         }
                         .padding(.vertical, AppSpacing.lg)
@@ -62,9 +69,55 @@ struct SettingsView: View {
     // MARK: - Server Card
     private var serverCard: some View {
         VStack(spacing: 0) {
-            cardHeader(icon: "server.rack", title: OrbixStrings.sectionServer, subtitle: serverName)
+            HStack(spacing: AppSpacing.md) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous)
+                        .fill(AppColors.accent.opacity(0.12))
+                        .frame(width: 44, height: 44)
+                    Image(systemName: "server.rack")
+                        .font(.system(size: 22, weight: .semibold))
+                        .foregroundColor(AppColors.accent)
+                }
 
-            Divider().background(AppColors.separator).opacity(0.6)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(OrbixStrings.sectionServer)
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(AppColors.label)
+                    Text(serverName)
+                        .font(.system(size: 13))
+                        .foregroundColor(AppColors.secondaryLabel)
+                }
+                Spacer()
+
+                if let online = serverOnline {
+                    HStack(spacing: 4) {
+                        Circle()
+                            .fill(online ? AppColors.success : AppColors.danger)
+                            .frame(width: 8, height: 8)
+                            .overlay(
+                                Circle()
+                                    .fill(online ? AppColors.success : AppColors.danger)
+                                    .frame(width: 8, height: 8)
+                                    .opacity(online ? 0.4 : 0)
+                                    .scaleEffect(online ? 1.5 : 1.0)
+                                    .animation(online ? .easeInOut(duration: 1.2).repeatForever(autoreverses: true) : .default, value: online)
+                            )
+                        Text(online ? String(localized: "在线", comment: "Online") : String(localized: "离线", comment: "Offline"))
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(online ? AppColors.success : AppColors.danger)
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .background(
+                        Capsule()
+                            .fill(online ? AppColors.success.opacity(0.1) : AppColors.danger.opacity(0.1))
+                    )
+                }
+            }
+            .padding(.horizontal, AppSpacing.lg)
+            .padding(.vertical, AppSpacing.md)
+
+            Divider().background(AppColors.separator)
 
             infoRow(icon: "network", label: OrbixStrings.sectionAddress, value: serverURL)
 
@@ -74,7 +127,7 @@ struct SettingsView: View {
 
             infoRow(icon: "person.fill", label: OrbixStrings.sectionUser, value: username)
 
-            Divider().background(AppColors.separator).opacity(0.6)
+            Divider().background(AppColors.separator)
 
             Button {
                 logout()
@@ -85,9 +138,6 @@ struct SettingsView: View {
                     Text(OrbixStrings.btnSwitchServer)
                         .font(.system(size: 15, weight: .medium))
                     Spacer()
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundColor(AppColors.tertiaryLabel)
                 }
                 .foregroundColor(AppColors.danger)
                 .padding(.horizontal, AppSpacing.lg)
@@ -106,9 +156,11 @@ struct SettingsView: View {
     private var securityCard: some View {
         if appLock.isDeviceSupported {
             VStack(spacing: 0) {
-                cardHeader(icon: appLock.hasFaceID ? "faceid" : "touchid", title: appLock.hasFaceID ? "Face ID" : OrbixStrings.miscBiometric)
+                cardHeader(icon: appLock.hasFaceID ? "faceid" : "touchid",
+                           title: appLock.hasFaceID ? "Face ID" : OrbixStrings.miscBiometric,
+                           accent: Color(hex: "#8B5CF6"))
 
-                Divider().background(AppColors.separator).opacity(0.6)
+                Divider().background(AppColors.separator)
 
                 VStack(alignment: .leading, spacing: AppSpacing.xs) {
                     Toggle(isOn: $appLock.isEnabled) {
@@ -116,15 +168,15 @@ struct SettingsView: View {
                             .font(.system(size: 15, weight: .medium))
                             .foregroundColor(AppColors.label)
                     }
-                    .tint(AppColors.accent)
+                    .tint(Color(hex: "#8B5CF6"))
 
                     if appLock.isEnabled {
                         HStack(spacing: AppSpacing.xs) {
-                            Image(systemName: "clock")
-                                .font(.system(size: 12))
+                            Image(systemName: "timer")
+                                .font(.system(size: 11))
                                 .foregroundColor(AppColors.tertiaryLabel)
-                            Text(OrbixStrings.infoAppLockHint)
-                                .font(.system(size: 12))
+                            Text(String(format: String(localized: "切到后台 %d 秒后锁定", comment: "Lock after X seconds in background"), Int(AppConstants.lockGracePeriod)))
+                                .font(.system(size: 11))
                                 .foregroundColor(AppColors.tertiaryLabel)
                         }
                         .padding(.top, AppSpacing.xs)
@@ -141,75 +193,117 @@ struct SettingsView: View {
     }
 
     // MARK: - Services Card
+    @ViewBuilder
     private var servicesCard: some View {
-        VStack(spacing: 0) {
-            cardHeader(icon: "antenna.radiowaves.left.and.right", title: OrbixStrings.sectionServices)
+        let list = creds.allCredentials
+        if !list.isEmpty {
+            VStack(spacing: 0) {
+                cardHeader(icon: "antenna.radiowaves.left.and.right",
+                           title: OrbixStrings.sectionServices,
+                           accent: AppColors.warning)
 
-            Divider().background(AppColors.separator).opacity(0.6)
+                Divider().background(AppColors.separator)
 
-            ForEach(creds.allCredentials) { cred in
-                Button {
-                    editingCred = cred
-                    showAddService = true
-                } label: {
+                ForEach(list) { cred in
                     HStack(spacing: AppSpacing.md) {
                         serviceIcon(kind: cred.kind)
 
                         VStack(alignment: .leading, spacing: AppSpacing.xs) {
-                            Text(cred.name)
-                                .font(.system(size: 15, weight: .medium))
-                                .foregroundColor(AppColors.label)
-                            Text("\(cred.host):\(cred.port)")
-                                .font(.system(size: 12, design: .monospaced))
+                            HStack(spacing: 4) {
+                                Text(cred.name)
+                                    .font(.system(size: 15, weight: .medium))
+                                    .foregroundColor(AppColors.label)
+                                if cred.kind == .qBittorrent {
+                                    Circle()
+                                        .fill(serverOnline == true ? AppColors.success : AppColors.danger)
+                                        .frame(width: 6, height: 6)
+                                } else if cred.kind == .prowlarr {
+                                    if let online = prowlarrOnline {
+                                        Circle()
+                                            .fill(online ? AppColors.success : AppColors.danger)
+                                            .frame(width: 6, height: 6)
+                                    }
+                                } else if cred.kind == .radarr {
+                                    if let online = radarrOnline {
+                                        Circle()
+                                            .fill(online ? AppColors.success : AppColors.danger)
+                                            .frame(width: 6, height: 6)
+                                    }
+                                }
+                            }
+                            Text(cred.kind == .qBittorrent ? "\(cred.host):\(cred.port)" : cred.apiURL)
+                                .font(.system(size: 11, design: .monospaced))
                                 .foregroundColor(AppColors.tertiaryLabel)
+                                .lineLimit(1)
                         }
+
                         Spacer()
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundColor(AppColors.tertiaryLabel)
+
+                        HStack(spacing: 12) {
+                            Button {
+                                editingCred = cred
+                                showAddService = true
+                            } label: {
+                                Image(systemName: "pencil")
+                                    .font(.system(size: 14))
+                                    .foregroundColor(AppColors.accent)
+                            }
+                            .buttonStyle(ScaleButtonStyle())
+
+                            Button {
+                                creds.remove(cred.kind)
+                            } label: {
+                                Image(systemName: "trash")
+                                    .font(.system(size: 14))
+                                    .foregroundColor(AppColors.danger)
+                            }
+                            .buttonStyle(ScaleButtonStyle())
+                        }
+                    }
+                    .padding(.horizontal, AppSpacing.lg)
+                    .padding(.vertical, AppSpacing.md)
+
+                    if cred.id != list.last?.id {
+                        Divider().background(AppColors.separator)
+                    }
+                }
+
+                Divider().background(AppColors.separator)
+
+                Button {
+                    editingCred = nil
+                    showAddService = true
+                } label: {
+                    HStack(spacing: AppSpacing.sm) {
+                        Image(systemName: "plus.circle.fill")
+                            .font(.system(size: 18))
+                            .foregroundColor(AppColors.warning)
+                        Text(OrbixStrings.navAddService)
+                            .font(.system(size: 15, weight: .medium))
+                            .foregroundColor(AppColors.warning)
+                        Spacer()
                     }
                     .padding(.horizontal, AppSpacing.lg)
                     .padding(.vertical, AppSpacing.md)
                 }
                 .buttonStyle(ScaleButtonStyle())
-
-                if cred.id != creds.allCredentials.last?.id {
-                    Divider().background(AppColors.separator).opacity(0.6)
-                }
             }
-
-            Divider().background(AppColors.separator).opacity(0.6)
-
-            Button {
-                editingCred = nil
-                showAddService = true
-            } label: {
-                HStack(spacing: AppSpacing.sm) {
-                    Image(systemName: "plus.circle.fill")
-                        .font(.system(size: 18))
-                        .foregroundColor(AppColors.accent)
-                    Text(OrbixStrings.navAddService)
-                        .font(.system(size: 15, weight: .medium))
-                        .foregroundColor(AppColors.accent)
-                    Spacer()
-                }
-                .padding(.horizontal, AppSpacing.lg)
-                .padding(.vertical, AppSpacing.md)
-            }
-            .buttonStyle(ScaleButtonStyle())
+            .background(
+                RoundedRectangle(cornerRadius: AppRadius.xl, style: .continuous)
+                    .fill(AppColors.card)
+            )
         }
-        .background(
-            RoundedRectangle(cornerRadius: AppRadius.xl, style: .continuous)
-                .fill(AppColors.card)
-        )
     }
 
     // MARK: - Update Card
     private var updateCard: some View {
         VStack(spacing: 0) {
-            cardHeader(icon: "arrow.down.circle", title: OrbixStrings.sectionUpdate, subtitle: "v\(appVersion)")
+            cardHeader(icon: "arrow.down.circle",
+                       title: OrbixStrings.sectionUpdate,
+                       subtitle: "v\(appVersion)",
+                       accent: AppColors.success)
 
-            Divider().background(AppColors.separator).opacity(0.6)
+            Divider().background(AppColors.separator)
 
             Button {
                 checkUpdate()
@@ -219,7 +313,7 @@ struct SettingsView: View {
                         if isCheckingUpdate {
                             ProgressView()
                                 .scaleEffect(0.8)
-                                .tint(AppColors.accent)
+                                .tint(AppColors.success)
                         } else if let check = updateCheck, check.latest != nil {
                             Image(systemName: "star.circle.fill")
                                 .font(.system(size: 16))
@@ -259,14 +353,76 @@ struct SettingsView: View {
             .disabled(isCheckingUpdate)
 
             if let check = updateCheck, let release = check.latest {
-                Divider().background(AppColors.separator).opacity(0.6)
+                Divider().background(AppColors.separator)
                 updateReleaseCard(release)
             }
 
             if isDownloading {
-                Divider().background(AppColors.separator).opacity(0.6)
+                Divider().background(AppColors.separator)
                 downloadProgressBar
             }
+        }
+        .background(
+            RoundedRectangle(cornerRadius: AppRadius.xl, style: .continuous)
+                .fill(AppColors.card)
+        )
+    }
+
+    // MARK: - About Card
+    private var aboutCard: some View {
+        VStack(spacing: 0) {
+            cardHeader(icon: "info.circle",
+                       title: String(localized: "关于", comment: "About"),
+                       accent: AppColors.tertiaryLabel)
+
+            Divider().background(AppColors.separator)
+
+            infoRow(icon: "tag", label: String(localized: "版本", comment: "Version"), value: appVersion)
+            infoRow(icon: "hammer", label: String(localized: "构建号", comment: "Build"), value: buildNumber)
+
+            Divider().background(AppColors.separator)
+
+            Button {
+                clearCache()
+            } label: {
+                HStack(spacing: AppSpacing.sm) {
+                    Image(systemName: showCacheCleared ? "checkmark.circle" : "photo.on.rectangle")
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundColor(showCacheCleared ? AppColors.success : AppColors.secondaryLabel)
+                    Text(showCacheCleared ? String(localized: "已清除", comment: "Cleared") : String(localized: "清除图片缓存", comment: "Clear image cache"))
+                        .font(.system(size: 14))
+                        .foregroundColor(showCacheCleared ? AppColors.success : AppColors.secondaryLabel)
+                    Spacer()
+                }
+                .padding(.horizontal, AppSpacing.lg)
+                .padding(.vertical, AppSpacing.md)
+            }
+            .buttonStyle(ScaleButtonStyle())
+            .disabled(showCacheCleared)
+
+            Divider().background(AppColors.separator)
+
+            Button {
+                if let url = URL(string: "https://github.com/ac54u/orbix") {
+                    UIApplication.shared.open(url)
+                }
+            } label: {
+                HStack(spacing: AppSpacing.sm) {
+                    Image(systemName: "link")
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundColor(AppColors.accent)
+                    Text("GitHub")
+                        .font(.system(size: 14))
+                        .foregroundColor(AppColors.accent)
+                    Spacer()
+                    Image(systemName: "arrow.up.right")
+                        .font(.system(size: 12))
+                        .foregroundColor(AppColors.tertiaryLabel)
+                }
+                .padding(.horizontal, AppSpacing.lg)
+                .padding(.vertical, AppSpacing.md)
+            }
+            .buttonStyle(ScaleButtonStyle())
         }
         .background(
             RoundedRectangle(cornerRadius: AppRadius.xl, style: .continuous)
@@ -280,7 +436,7 @@ struct SettingsView: View {
                 ZStack(alignment: .leading) {
                     Capsule().fill(AppColors.separator)
                     Capsule()
-                        .fill(AppColors.accent)
+                        .fill(AppColors.success)
                         .frame(width: max(4, geo.size.width * downloadProgress))
                         .animation(.easeOut(duration: 0.3), value: downloadProgress)
                 }
@@ -294,7 +450,7 @@ struct SettingsView: View {
                 Spacer()
                 Text("\(min(99, Int(downloadProgress * 100)))%")
                     .font(.system(size: 12, weight: .medium, design: .monospaced))
-                    .foregroundColor(AppColors.accent)
+                    .foregroundColor(AppColors.success)
             }
         }
         .padding(.horizontal, AppSpacing.lg)
@@ -302,27 +458,21 @@ struct SettingsView: View {
     }
 
     // MARK: - Shared components
-    private func cardHeader(icon: String, title: String, subtitle: String? = nil) -> some View {
+    private func cardHeader(icon: String, title: String, subtitle: String? = nil, accent: Color = AppColors.accent) -> some View {
         VStack(alignment: .leading, spacing: AppSpacing.xs) {
             HStack(spacing: AppSpacing.sm) {
                 Image(systemName: icon)
                     .font(.system(size: 15, weight: .semibold))
-                    .foregroundColor(AppColors.accent)
+                    .foregroundColor(accent)
                 Text(title)
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundColor(AppColors.label)
             }
 
-            if let subtitle = subtitle, !subtitle.isEmpty, subtitle != "-" {
-                HStack(spacing: AppSpacing.sm) {
-                    Circle()
-                        .fill(AppColors.success)
-                        .frame(width: 6, height: 6)
-                    Text(subtitle)
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundColor(AppColors.secondaryLabel)
-                }
-                .padding(.leading, AppSpacing.xs)
+            if let subtitle = subtitle, !subtitle.isEmpty {
+                Text(subtitle)
+                    .font(.system(size: 12))
+                    .foregroundColor(AppColors.tertiaryLabel)
             }
         }
         .padding(.horizontal, AppSpacing.lg)
@@ -417,7 +567,7 @@ struct SettingsView: View {
                 .padding(.vertical, AppSpacing.md)
                 .background(
                     RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous)
-                        .fill(AppColors.accent)
+                        .fill(AppColors.success)
                 )
             }
             .buttonStyle(ScaleButtonStyle())
@@ -434,15 +584,47 @@ struct SettingsView: View {
     private func loadInfo() {
         Task {
             let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
+            let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "0"
             let config = await QBitApi.shared.loadSavedConfig()
             let qbitVersion = try? await QBitApi.shared.getAppVersion()
 
+            let configForTest = config
+            async let serverResult: CredentialsManager.TestResult? = {
+                guard let cfg = configForTest else { return nil }
+                return await CredentialsManager.testConnection(
+                    kind: .qBittorrent, host: cfg.host, port: cfg.port, https: cfg.https,
+                    username: cfg.username, password: cfg.password
+                )
+            }()
+
+            async let prowlarrResult: CredentialsManager.TestResult? = {
+                guard let pc = CredentialsManager.shared.prowlarr, !pc.host.isEmpty else { return nil }
+                return await CredentialsManager.testConnection(
+                    kind: .prowlarr, host: pc.host, port: pc.port, https: pc.https, apiKey: pc.apiKey
+                )
+            }()
+
+            async let radarrResult: CredentialsManager.TestResult? = {
+                guard let rc = CredentialsManager.shared.radarr, !rc.host.isEmpty else { return nil }
+                return await CredentialsManager.testConnection(
+                    kind: .radarr, host: rc.host, port: rc.port, https: rc.https, apiKey: rc.apiKey
+                )
+            }()
+
+            let sR = await serverResult
+            let pR = await prowlarrResult
+            let rR = await radarrResult
+
             await MainActor.run {
                 appVersion = version
+                buildNumber = build
                 serverName = config?.name ?? "-"
                 serverURL = config?.url ?? "-"
                 username = config?.username ?? "-"
                 serverVersion = qbitVersion ?? ""
+                serverOnline = sR?.isSuccess
+                prowlarrOnline = pR?.isSuccess
+                radarrOnline = rR?.isSuccess
                 isLoading = false
             }
         }
@@ -496,6 +678,16 @@ struct SettingsView: View {
 
         let vc = UIActivityViewController(activityItems: [url], applicationActivities: nil)
         root.present(vc, animated: true)
+    }
+
+    private func clearCache() {
+        ImageCache.shared.removeAll()
+        URLCache.shared.removeAllCachedResponses()
+        showCacheCleared = true
+        Task {
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            await MainActor.run { showCacheCleared = false }
+        }
     }
 }
 

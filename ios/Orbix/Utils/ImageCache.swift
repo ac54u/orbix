@@ -16,4 +16,8 @@ final class ImageCache {
     func set(_ key: String, image: UIImage) {
         cache.setObject(image, forKey: key as NSString)
     }
+
+    func removeAll() {
+        cache.removeAllObjects()
+    }
 }
