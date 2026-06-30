@@ -26,8 +26,12 @@ enum ProwlarrApi {
 
     @MainActor
     static func search(query: String) async throws -> [SearchResult] {
-        guard let cred = CredentialsManager.shared.prowlarr, !cred.apiKey.isEmpty else { return [] }
-        guard var components = URLComponents(string: "\(cred.apiURL)/search") else { return [] }
+        guard let cred = CredentialsManager.shared.prowlarr, !cred.apiKey.isEmpty else {
+            throw ApiError.unauthorized
+        }
+        guard var components = URLComponents(string: "\(cred.apiURL)/search") else {
+            throw ApiError.invalidURL
+        }
         components.queryItems = [
             URLQueryItem(name: "query", value: query),
             URLQueryItem(name: "type", value: "search")
@@ -46,8 +50,12 @@ enum ProwlarrApi {
 
     @MainActor
     static func searchMovie(tmdbId: Int) async throws -> [SearchResult] {
-        guard let cred = CredentialsManager.shared.prowlarr, !cred.apiKey.isEmpty else { return [] }
-        guard var components = URLComponents(string: "\(cred.apiURL)/search") else { return [] }
+        guard let cred = CredentialsManager.shared.prowlarr, !cred.apiKey.isEmpty else {
+            throw ApiError.unauthorized
+        }
+        guard var components = URLComponents(string: "\(cred.apiURL)/search") else {
+            throw ApiError.invalidURL
+        }
         components.queryItems = [
             URLQueryItem(name: "type", value: "movie"),
             URLQueryItem(name: "tmdbId", value: String(tmdbId))
@@ -67,7 +75,7 @@ enum ProwlarrApi {
     @MainActor
     static func downloadTorrent(url: String) async throws -> Data {
         guard let cred = CredentialsManager.shared.prowlarr, !cred.apiKey.isEmpty else {
-            throw URLError(.userAuthenticationRequired)
+            throw ApiError.unauthorized
         }
         guard let torrentURL = URL(string: url) else {
             throw URLError(.badURL)

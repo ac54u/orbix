@@ -192,6 +192,7 @@ enum OrbixStrings {
     static let infoEmptyZeroHint = String(localized: "留空或填 0 表示不限速", comment: "Empty or 0 means unlimited")
     static let infoSequentialHint = String(localized: "按文件顺序下载，适合预览媒体文件", comment: "Sequential download hint")
     static let infoProwlarrHint = String(localized: "请确认 Prowlarr 中已添加索引器", comment: "Prowlarr indexer hint")
+    static let infoRadarrHint = String(localized: "请确认 Radarr 可正常连接 TMDB，或尝试其他关键词", comment: "Radarr lookup hint")
     static let infoDefaultPathHint = String(localized: "留空则使用 qBittorrent 默认下载路径", comment: "Default path hint")
     static let infoAltSpeedHint = String(localized: "开启后使用备用限速方案", comment: "Alt speed hint")
     static let infoEmptyZeroGlobalHint = String(localized: "空或 0 表示不限制", comment: "Empty or 0 means no limit")
