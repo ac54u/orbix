@@ -245,6 +245,7 @@ enum OrbixStrings {
     static let miscModifyPath = String(localized: "修改保存路径", comment: "Modify save path")
     static let miscBookmark = String(localized: "收藏", comment: "Bookmark")
     static let miscUnbookmark = String(localized: "取消收藏", comment: "Unbookmark")
+    static let miscUpdateAvailable = String(localized: "更新可用", comment: "Update available")
 
     // MARK: - Batch / Edit mode
     static let btnSelectAll = String(localized: "全选", comment: "Select all")
