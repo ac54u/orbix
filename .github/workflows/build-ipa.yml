@@ -38,7 +38,7 @@ jobs:
           xcodebuild test \
             -project Orbix.xcodeproj \
             -scheme Orbix \
-            -destination 'platform=iOS Simulator,name=iPhone 16,OS=18.5' \
+            -destination 'platform=iOS Simulator,name=iPhone 16' \
             -derivedDataPath build 2>&1 | tee test.log | xcpretty --simple --color || {
               echo "Tests failed. Tail:"
               tail -n 100 test.log
