@@ -190,11 +190,31 @@ struct StatsView: View {
     private func refresh() {
         Task {
             do {
-                let t = try await QBitApi.shared.getTransferInfo()
-                let list = try await QBitApi.shared.getTorrents()
-                let ver = try? await QBitApi.shared.getAppVersion()
+                async let tTask = QBitApi.shared.getTransferInfo()
+                async let sTask = QBitApi.shared.syncMainData(rid: 0)
+                async let lTask = QBitApi.shared.getTorrents()
+                async let vTask = QBitApi.shared.getAppVersion()
+
+                let t = try await tTask
+                let sync = try? await sTask
+                let list = try await lTask
+                let ver = try? await vTask
+
                 await MainActor.run {
-                    transfer = t
+                    if var merged = t {
+                        if merged.serverState == nil, let state = sync?.serverState {
+                            merged = TransferInfo(
+                                dlInfoSpeed: merged.dlInfoSpeed,
+                                upInfoSpeed: merged.upInfoSpeed,
+                                dlRateLimit: merged.dlRateLimit,
+                                upRateLimit: merged.upRateLimit,
+                                dlInfoData: merged.dlInfoData,
+                                upInfoData: merged.upInfoData,
+                                serverState: state
+                            )
+                        }
+                        transfer = merged
+                    }
                     torrents = list
                     serverVersion = ver ?? ""
                     isLoading = false
