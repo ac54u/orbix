@@ -43,14 +43,14 @@ struct SettingsView: View {
 
                     let svcList = creds.allCredentials
                     if !svcList.isEmpty {
-                        Section {
-                            ForEach(svcList) { cred in
-                                serviceRow(cred: cred)
-                            }
-                            addServiceRow
-                        } header: {
-                            Text(OrbixStrings.sectionServices.uppercased())
+                    Section {
+                        ForEach(svcList) { cred in
+                            serviceRow(cred: cred)
                         }
+                        addServiceRow
+                    } header: {
+                        Text(String(localized: "已保存的服务器", comment: "Saved servers").uppercased())
+                    }
                     }
 
                     Section {
@@ -62,7 +62,7 @@ struct SettingsView: View {
                             downloadBar
                         }
                     } header: {
-                        Text("v\(appVersion)")
+                        Text(String(localized: "更新", comment: "Update").uppercased())
                     }
 
                     Section {
@@ -125,6 +125,8 @@ struct SettingsView: View {
 
                 Spacer()
             }
+
+            Divider()
 
             VStack(spacing: 0) {
                 HStack {
