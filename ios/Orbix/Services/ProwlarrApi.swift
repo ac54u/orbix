@@ -25,21 +25,22 @@ enum ProwlarrApi {
     }
 
     @MainActor
-    static func search(query: String, indexerIds: [Int] = []) async throws -> [SearchResult] {
+    static func search(query: String) async throws -> [SearchResult] {
         guard let cred = CredentialsManager.shared.prowlarr, !cred.apiKey.isEmpty else { return [] }
-        var allowed = CharacterSet.alphanumerics
-        allowed.insert(charactersIn: "-._~")
-        let encoded = query.addingPercentEncoding(withAllowedCharacters: allowed) ?? query
-        guard let url = URL(string: "\(cred.apiURL)/search?query=\(encoded)&type=search") else { return [] }
+        guard var components = URLComponents(string: "\(cred.apiURL)/search") else { return [] }
+        components.queryItems = [
+            URLQueryItem(name: "query", value: query),
+            URLQueryItem(name: "type", value: "search")
+        ]
+        guard let url = components.url else { return [] }
 
         var req = URLRequest(url: url)
         req.setValue(cred.apiKey, forHTTPHeaderField: "X-Api-Key")
         let (data, response) = try await session.data(for: req)
-        // Throw on non-200 so caller can show error
         if let http = response as? HTTPURLResponse, http.statusCode != 200 {
             throw NSError(domain: "Prowlarr", code: http.statusCode)
         }
-        let results = (try? decoder.decode([ProwlarrSearchResult].self, from: data)) ?? []
+        let results = try decoder.decode([ProwlarrSearchResult].self, from: data)
         return results.map(\.toUnified)
     }
 
