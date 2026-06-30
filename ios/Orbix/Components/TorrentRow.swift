@@ -5,8 +5,6 @@ struct TorrentRow: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            accentStripe
-
             HStack(alignment: .top, spacing: AppSpacing.md) {
                 StatusIcon(status: torrent.statusBadge)
 
@@ -31,13 +29,6 @@ struct TorrentRow: View {
             RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
                 .fill(AppColors.card)
         )
-    }
-
-    private var accentStripe: some View {
-        RoundedRectangle(cornerRadius: AppRadius.xs, style: .continuous)
-            .fill(torrent.progressColor)
-            .frame(width: 3)
-            .padding(.vertical, AppSpacing.sm)
     }
 
     private var nameRow: some View {

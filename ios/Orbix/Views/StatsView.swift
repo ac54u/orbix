@@ -19,7 +19,6 @@ struct StatsView: View {
                     sessionSection
                     serverInfoSection
                     torrentStatusSection
-                    categorySection
                 }
             }
             .listStyle(.insetGrouped)
@@ -158,35 +157,6 @@ struct StatsView: View {
         } header: {
             Text(String(localized: "种子状态", comment: "Torrent status").uppercased())
         }
-    }
-
-    // MARK: - Categories
-    private var categorySection: some View {
-        let cats = Dictionary(grouping: torrents, by: { $0.category.isEmpty ? String(localized: "未分类", comment: "Uncategorized") : $0.category })
-            .mapValues { $0.count }
-            .sorted(by: { $0.key < $1.key })
-
-        guard !cats.isEmpty else {
-            return AnyView(EmptyView())
-        }
-
-        return AnyView(
-            Section {
-                ForEach(cats, id: \.key) { name, count in
-                    HStack(spacing: 12) {
-                        Text(name)
-                            .font(.system(size: 15))
-                            .foregroundColor(AppColors.secondaryLabel)
-                        Spacer()
-                        Text("\(count)")
-                            .font(.system(size: 15))
-                            .foregroundColor(AppColors.label)
-                    }
-                }
-            } header: {
-                Text(String(localized: "分类", comment: "Categories").uppercased())
-            }
-        )
     }
 
     // MARK: - Row Helper
