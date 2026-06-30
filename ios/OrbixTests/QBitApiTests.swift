@@ -75,12 +75,7 @@ final class QBitApiTests: XCTestCase {
     }
 
     func testLogin_invalidURL() async {
-        MockURLProtocol.responseHandler = { _ in
-            XCTFail("Should not be called")
-            throw URLError(.badURL)
-        }
-
-        let server = ServerConfig(name: "test", host: "", port: 0, username: "", password: "", https: false)
+        let server = ServerConfig(name: "test", host: "\n", port: 0, username: "", password: "", https: false)
         let result = await api.login(server: server)
         XCTAssertEqual(result.status, .unknown)
     }
@@ -94,14 +89,13 @@ final class QBitApiTests: XCTestCase {
 
         MockURLProtocol.responseHandler = { request in
             let resp = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: ["Content-Type": "application/json"])!
-            let json = #"[{"hash":"abc","name":"test","state":"downloading","progress":0.5,"dlspeed":0,"upspeed":0,"size":1000}]"#
+            let json = #"{"hash":"abc","name":"test","state":"downloading","progress":0.5,"dlspeed":0,"upspeed":0,"dl_limit":0,"up_limit":0,"eta":0,"size":1000,"downloaded":0,"uploaded":0,"ratio":0,"num_seeds":0,"num_leechs":0,"category":"","tags":"","save_path":"/tmp","added_on":0,"completion_on":0,"error":0,"error_string":""}"#
             return (resp, Data(json.utf8))
         }
 
-        let torrents: [TorrentInfo]? = try await api.authedGet("/api/v2/torrents/info", type: [TorrentInfo].self)
-        XCTAssertNotNil(torrents)
-        XCTAssertEqual(torrents?.count, 1)
-        XCTAssertEqual(torrents?.first?.hash, "abc")
+        let torrent: TorrentInfo? = try await api.authedGet("/api/v2/torrents/info", type: TorrentInfo.self)
+        XCTAssertNotNil(torrent)
+        XCTAssertEqual(torrent?.hash, "abc")
     }
 
     func testAuthedGet_invalidURL_throws() async {

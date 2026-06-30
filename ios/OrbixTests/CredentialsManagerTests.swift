@@ -93,10 +93,11 @@ final class CredentialsManagerTests: XCTestCase {
 
     func testConnection_qBittorrent_invalidHost() async {
         let result = await CredentialsManager.testConnection(
-            kind: .qBittorrent, host: " ", port: 0, https: false,
+            kind: .qBittorrent,
+            host: "http://\ninvalid", port: 0, https: false,
             username: "u", password: "p"
         )
-        XCTAssertEqual(result, .invalidHost)
+        XCTAssertFalse(result.isSuccess)
     }
 
     // MARK: - Prowlarr

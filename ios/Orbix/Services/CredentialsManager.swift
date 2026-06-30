@@ -194,7 +194,7 @@ final class CredentialsManager: ObservableObject {
                 if kind == .qBittorrent && !https { return .okInsecure }
                 return .ok
             }
-            if http.statusCode == 401 { return .authFailed }
+            if http.statusCode == 401 || http.statusCode == 403 { return .authFailed }
             return .unknown(String(format: OrbixStrings.connServerReturn, http.statusCode, endpoint))
         } catch let err as URLError {
             if err.code == .timedOut { return .timeout }
