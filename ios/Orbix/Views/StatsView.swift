@@ -79,7 +79,7 @@ struct StatsView: View {
                 }
             } label: {
                 Text(altSpeedEnabled ? String(localized: "恢复全速", comment: "Restore full speed")
-                     : String(localized: "启用来", comment: "Enable alt"))
+                     : String(localized: "启用备用", comment: "Enable alt"))
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundColor(AppColors.accent)
                     .padding(.horizontal, 12)
