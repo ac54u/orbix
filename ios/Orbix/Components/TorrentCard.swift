@@ -28,7 +28,7 @@ struct TorrentCard: View {
             if !torrent.size.isEmpty {
                 Text(torrent.size)
                     .font(.system(size: 10, weight: .semibold, design: .rounded))
-                    .foregroundColor(AppColors.label)
+                    .foregroundColor(.white)
                     .padding(.horizontal, 4)
                     .padding(.vertical, 2)
                     .background(RoundedRectangle(cornerRadius: AppRadius.xs).fill(.black.opacity(0.65)))

@@ -64,7 +64,7 @@ struct TorrentDetailSheet: View {
                             .overlay(alignment: .bottomLeading) {
                                 Text(torrent.size)
                                     .font(.system(size: 11, weight: .semibold, design: .rounded))
-                                    .foregroundColor(AppColors.label)
+                                    .foregroundColor(.white)
                                     .padding(.horizontal, AppSpacing.sm)
                                     .padding(.vertical, AppSpacing.xs)
                                     .background(

@@ -131,10 +131,10 @@ struct LoginView: View {
                     if let result = testResult {
                         HStack {
                             Image(systemName: result.isSuccess ? "checkmark.circle.fill" : "xmark.circle.fill")
-                                .foregroundColor(result.isSuccess ? .green : .red)
+                                .foregroundColor(result.isSuccess ? AppColors.success : AppColors.danger)
                             Text(result.isSuccess ? OrbixStrings.miscConnectSuccess : result.message)
                                 .font(.system(size: 13))
-                                .foregroundColor(result.isSuccess ? .green : .red)
+                                .foregroundColor(result.isSuccess ? AppColors.success : AppColors.danger)
                         }
                         .frame(maxWidth: .infinity, alignment: .center)
                         .padding(.vertical, 4)

@@ -214,7 +214,7 @@ struct SearchView: View {
                             Spacer()
                             Text(section.date)
                                 .font(.system(size: 10, weight: .semibold, design: .rounded))
-                                .foregroundColor(AppColors.label)
+                                .foregroundColor(.white)
                                 .padding(.horizontal, 6)
                                 .padding(.vertical, 3)
                                 .background(
