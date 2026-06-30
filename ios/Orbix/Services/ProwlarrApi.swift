@@ -45,6 +45,26 @@ enum ProwlarrApi {
     }
 
     @MainActor
+    static func searchMovie(tmdbId: Int) async throws -> [SearchResult] {
+        guard let cred = CredentialsManager.shared.prowlarr, !cred.apiKey.isEmpty else { return [] }
+        guard var components = URLComponents(string: "\(cred.apiURL)/search") else { return [] }
+        components.queryItems = [
+            URLQueryItem(name: "type", value: "movie"),
+            URLQueryItem(name: "tmdbId", value: String(tmdbId))
+        ]
+        guard let url = components.url else { return [] }
+
+        var req = URLRequest(url: url)
+        req.setValue(cred.apiKey, forHTTPHeaderField: "X-Api-Key")
+        let (data, response) = try await session.data(for: req)
+        if let http = response as? HTTPURLResponse, http.statusCode != 200 {
+            throw NSError(domain: "Prowlarr", code: http.statusCode)
+        }
+        let results = try decoder.decode([ProwlarrSearchResult].self, from: data)
+        return results.map(\.toUnified)
+    }
+
+    @MainActor
     static func downloadTorrent(url: String) async throws -> Data {
         guard let cred = CredentialsManager.shared.prowlarr, !cred.apiKey.isEmpty else {
             throw URLError(.userAuthenticationRequired)

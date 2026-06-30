@@ -138,7 +138,7 @@ struct QBitSearchView: View {
             .sheet(isPresented: $showDownloadSheet) {
                 if let result = selectedResult {
                     QBitDownloadSheet(result: result, categories: categories, isFromProwlarr: searchSource == .prowlarr)
-                        .presentationDetents([.large])
+                        .presentationDetents([.medium, .large])
                         .presentationDragIndicator(.visible)
                 }
             }
@@ -359,7 +359,17 @@ struct QBitSearchView: View {
 
     private func runProwlarrSearch() async {
         do {
-            let items = try await ProwlarrApi.search(query: query)
+            let items: [SearchResult]
+            if creds.radarr != nil {
+                let movies = (try? await RadarrApi.lookup(query: query)) ?? []
+                if let first = movies.first, first.num > 0 {
+                    items = try await ProwlarrApi.searchMovie(tmdbId: first.num)
+                } else {
+                    items = try await ProwlarrApi.search(query: query)
+                }
+            } else {
+                items = try await ProwlarrApi.search(query: query)
+            }
             await MainActor.run {
                 self.results = items.sorted { $0.nbSeeders > $1.nbSeeders }
                 self.isLoading = false
