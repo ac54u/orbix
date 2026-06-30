@@ -19,9 +19,6 @@ struct SettingsView: View {
     @State private var downloadProgress: Double = 0
 
     @EnvironmentObject private var appLock: AppLockService
-    @ObservedObject private var creds = CredentialsManager.shared
-    @State private var showAddService = false
-    @State private var editingCred: ServiceCredential?
 
     var body: some View {
         NavigationStack {
@@ -39,18 +36,6 @@ struct SettingsView: View {
                         } header: {
                             Text(String(localized: "安全", comment: "Security").uppercased())
                         }
-                    }
-
-                    let svcList = creds.allCredentials
-                    if !svcList.isEmpty {
-                    Section {
-                        ForEach(svcList) { cred in
-                            serviceRow(cred: cred)
-                        }
-                        addServiceRow
-                    } header: {
-                        Text(String(localized: "已保存的服务器", comment: "Saved servers").uppercased())
-                    }
                     }
 
                     Section {
@@ -77,11 +62,6 @@ struct SettingsView: View {
             .scrollContentBackground(.hidden)
             .background(AppColors.groupedBg)
             .navigationTitle(OrbixStrings.navSettings)
-            .sheet(isPresented: $showAddService) {
-                AddServiceView(existing: editingCred) { cred in creds.save(cred) }
-                    .presentationDetents([.large])
-                    .presentationDragIndicator(.visible)
-            }
             .onAppear { loadInfo() }
         }
     }
@@ -201,55 +181,6 @@ struct SettingsView: View {
                     .foregroundColor(AppColors.secondaryLabel)
             }
         }
-    }
-
-    // MARK: - Services
-    private func serviceRow(cred: ServiceCredential) -> some View {
-        Button {
-            editingCred = cred
-            showAddService = true
-        } label: {
-            HStack(spacing: 12) {
-                Image(systemName: cred.kind.icon)
-                    .font(.system(size: 15))
-                    .foregroundColor(serviceColor(cred.kind))
-                    .frame(width: 26)
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(cred.name)
-                        .font(.system(size: 15))
-                        .foregroundColor(AppColors.label)
-                    Text("\(cred.host):\(cred.port)")
-                        .font(.system(size: 13, design: .monospaced))
-                        .foregroundColor(AppColors.secondaryLabel)
-                }
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(AppColors.tertiaryLabel)
-            }
-        }
-    }
-
-    private var addServiceRow: some View {
-        Button {
-            editingCred = nil
-            showAddService = true
-        } label: {
-            HStack(spacing: 12) {
-                Image(systemName: "plus.circle.fill")
-                    .font(.system(size: 16))
-                    .foregroundColor(AppColors.accent)
-                    .frame(width: 26)
-                Text(OrbixStrings.navAddService)
-                    .font(.system(size: 15))
-                    .foregroundColor(AppColors.accent)
-            }
-        }
-    }
-
-    private func serviceColor(_ kind: ServiceKind) -> Color {
-        AppColors.accent
     }
 
     // MARK: - Update
