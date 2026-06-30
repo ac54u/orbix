@@ -598,14 +598,14 @@ struct SettingsView: View {
             }()
 
             async let prowlarrResult: CredentialsManager.TestResult? = {
-                guard let pc = CredentialsManager.shared.prowlarr, !pc.host.isEmpty else { return nil }
+                guard let pc = await CredentialsManager.shared.prowlarr, !pc.host.isEmpty else { return nil }
                 return await CredentialsManager.testConnection(
                     kind: .prowlarr, host: pc.host, port: pc.port, https: pc.https, apiKey: pc.apiKey
                 )
             }()
 
             async let radarrResult: CredentialsManager.TestResult? = {
-                guard let rc = CredentialsManager.shared.radarr, !rc.host.isEmpty else { return nil }
+                guard let rc = await CredentialsManager.shared.radarr, !rc.host.isEmpty else { return nil }
                 return await CredentialsManager.testConnection(
                     kind: .radarr, host: rc.host, port: rc.port, https: rc.https, apiKey: rc.apiKey
                 )

@@ -442,7 +442,6 @@ struct StatsView: View {
         let dl = torrents.filter { $0.statusBadge == .downloading || $0.statusBadge == .metaDL }.count
         let up = torrents.filter { $0.statusBadge == .uploading || $0.statusBadge == .stalledUP }.count
         let paused = torrents.filter { $0.statusBadge.isPaused }.count
-        let checking = torrents.filter { $0.statusBadge == .checkingDL || $0.statusBadge == .checkingUP }.count
         let errored = torrents.filter { $0.statusBadge.isError }.count
         let completed = torrents.filter { $0.isCompleted && !$0.statusBadge.isUploadRelated }.count
 
