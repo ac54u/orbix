@@ -121,7 +121,6 @@ struct TorrentListView: View {
                 Button(OrbixStrings.btnCancel, role: .cancel) {}
             } message: {
                 Text(String(format: OrbixStrings.infoBatchDeleteConfirm, selectedHashes.count))
-            }
         }
     }
 
