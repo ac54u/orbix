@@ -33,8 +33,7 @@ enum ProwlarrApi {
             throw ApiError.invalidURL
         }
         components.queryItems = [
-            URLQueryItem(name: "query", value: query),
-            URLQueryItem(name: "type", value: "search")
+            URLQueryItem(name: "query", value: query)
         ]
         guard let url = components.url else { return [] }
 
@@ -57,8 +56,8 @@ enum ProwlarrApi {
             throw ApiError.invalidURL
         }
         components.queryItems = [
-            URLQueryItem(name: "type", value: "movie"),
-            URLQueryItem(name: "tmdbId", value: String(tmdbId))
+            URLQueryItem(name: "query", value: "tmdb:\(tmdbId)"),
+            URLQueryItem(name: "type", value: "movie")
         ]
         guard let url = components.url else { return [] }
 
